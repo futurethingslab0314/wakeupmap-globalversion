@@ -71,6 +71,8 @@ test("generateStory builds bilingual output constraints including the required o
   assert.match(requests[0].userPrompt, /lesser-known historical detail/i);
   assert.match(requests[0].userPrompt, /under 150/i);
   assert.match(requests[0].userPrompt, /YT/);
+  assert.equal(requests[0].responseFormat?.type, "json_schema");
+  assert.equal(requests[0].responseFormat?.json_schema?.name, "wake_up_story");
 });
 
 test("generateStory accepts JSON wrapped in a markdown code fence", async () => {
@@ -92,15 +94,18 @@ test("generateStory accepts JSON wrapped in a markdown code fence", async () => 
 });
 
 test("generateLocalBreakfast returns concept fields and canonical highlightIngredients", async () => {
+  const requests: OpenAITextRequest[] = [];
   const openai = {
-    generateText: async () =>
-      JSON.stringify({
+    generateText: async (request: OpenAITextRequest) => {
+      requests.push(request);
+      return JSON.stringify({
         name: "Soy Milk and Youtiao",
         nameZh: "豆漿油條",
         description: "A classic Taiwanese breakfast pairing.",
         descriptionZh: "經典台式早餐組合。",
         highlightIngredients: ["soy milk", "youtiao", "scallion"],
-      }),
+      });
+    },
   };
 
   const result = await generateLocalBreakfast({
@@ -111,4 +116,6 @@ test("generateLocalBreakfast returns concept fields and canonical highlightIngre
   assert.equal(result.name, "Soy Milk and Youtiao");
   assert.equal(result.nameZh, "豆漿油條");
   assert.deepEqual(result.highlightIngredients, ["soy milk", "youtiao", "scallion"]);
+  assert.equal(requests[0].responseFormat?.type, "json_schema");
+  assert.equal(requests[0].responseFormat?.json_schema?.name, "local_breakfast");
 });

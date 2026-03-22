@@ -63,6 +63,58 @@ type RecipeResult = {
   imagePrompt: string;
 };
 
+type StructuredResponseFormat = {
+  type: "json_schema";
+  json_schema: {
+    name: string;
+    schema: Record<string, unknown>;
+    strict?: boolean;
+  };
+};
+
+const wakeUpStorySchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    story: { type: "string" },
+    storyZh: { type: "string" },
+  },
+  required: ["story", "storyZh"],
+} as const;
+
+const localBreakfastSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    name: { type: "string" },
+    nameZh: { type: "string" },
+    description: { type: "string" },
+    descriptionZh: { type: "string" },
+    highlightIngredients: {
+      type: "array",
+      items: { type: "string" },
+    },
+  },
+  required: ["name", "nameZh", "description", "descriptionZh", "highlightIngredients"],
+} as const;
+
+const breakfastRecipeSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    title: { type: "string" },
+    titleZh: { type: "string" },
+    recipe: { type: "string" },
+    recipeZh: { type: "string" },
+    highlightIngredients: {
+      type: "array",
+      items: { type: "string" },
+    },
+    imagePrompt: { type: "string" },
+  },
+  required: ["title", "titleZh", "recipe", "recipeZh", "highlightIngredients", "imagePrompt"],
+} as const;
+
 let cachedWorldCities: RawWorldCity[] | undefined;
 
 function normalizeKey(value: string): string {
@@ -337,7 +389,7 @@ function getOpenAIApiKey(): string {
   return apiKey;
 }
 
-async function callOpenAIText(prompt: string): Promise<string> {
+async function callOpenAIText(prompt: string, responseFormat?: StructuredResponseFormat): Promise<string> {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -347,6 +399,13 @@ async function callOpenAIText(prompt: string): Promise<string> {
     body: JSON.stringify({
       model: "gpt-4.1-mini",
       input: prompt,
+      ...(responseFormat
+        ? {
+            text: {
+              format: responseFormat,
+            },
+          }
+        : {}),
     }),
   });
 
@@ -438,6 +497,14 @@ async function generateStory(city: WorldCity, greeting: string, userName: string
         "Avoid stereotypes and invented facts.",
         "Return JSON with keys story and storyZh.",
       ].join("\n"),
+      {
+        type: "json_schema",
+        json_schema: {
+          name: "wake_up_story",
+          schema: wakeUpStorySchema,
+          strict: true,
+        },
+      },
     ),
     "Story generator",
   );
@@ -459,6 +526,14 @@ async function generateBreakfastConcept(city: WorldCity) {
         "Return JSON with name, nameZh, description, descriptionZh, highlightIngredients.",
         "highlightIngredients must be an array of short canonical ingredient names.",
       ].join("\n"),
+      {
+        type: "json_schema",
+        json_schema: {
+          name: "local_breakfast",
+          schema: localBreakfastSchema,
+          strict: true,
+        },
+      },
     ),
     "Breakfast generator",
   );
@@ -482,6 +557,14 @@ async function generateRecipe(city: WorldCity, breakfastConcept: Awaited<ReturnT
         "Also return an image prompt that matches exactly the same ingredients and plating style.",
         "Return JSON with title, titleZh, recipe, recipeZh, highlightIngredients, imagePrompt.",
       ].join("\n"),
+      {
+        type: "json_schema",
+        json_schema: {
+          name: "breakfast_recipe",
+          schema: breakfastRecipeSchema,
+          strict: true,
+        },
+      },
     ),
     "Recipe generator",
   );

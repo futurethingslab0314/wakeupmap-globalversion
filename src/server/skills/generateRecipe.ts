@@ -1,5 +1,6 @@
 import type { BreakfastConcept, OpenAIClient, RecipeResult } from "../types.ts";
 import { parseModelJson } from "../services/parseModelJson.ts";
+import { breakfastRecipeSchema } from "../services/openaiSchemas.ts";
 
 interface GenerateRecipeInput {
   openai: Pick<OpenAIClient, "generateText">;
@@ -27,6 +28,14 @@ export async function generateRecipe(input: GenerateRecipeInput): Promise<Recipe
       "Also return an image prompt that matches exactly the same ingredients and plating style.",
       "Return JSON with title, titleZh, recipe, recipeZh, highlightIngredients, imagePrompt.",
     ].join("\n"),
+    responseFormat: {
+      type: "json_schema",
+      json_schema: {
+        name: "breakfast_recipe",
+        schema: breakfastRecipeSchema,
+        strict: true,
+      },
+    },
   });
 
   return parseModelJson<RecipeResult>(response, "Recipe generator");

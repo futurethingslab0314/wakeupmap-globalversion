@@ -1,5 +1,6 @@
 import type { CityMappingRecord, OpenAIClient, StoryResult } from "../types.ts";
 import { parseModelJson } from "../services/parseModelJson.ts";
+import { wakeUpStorySchema } from "../services/openaiSchemas.ts";
 
 interface GenerateStoryInput {
   openai: Pick<OpenAIClient, "generateText">;
@@ -23,6 +24,14 @@ export async function generateStory(input: GenerateStoryInput): Promise<StoryRes
       "Avoid stereotypes and invented facts.",
       "Return JSON with keys story and storyZh.",
     ].join("\n"),
+    responseFormat: {
+      type: "json_schema",
+      json_schema: {
+        name: "wake_up_story",
+        schema: wakeUpStorySchema,
+        strict: true,
+      },
+    },
   });
 
   return parseModelJson<StoryResult>(response, "Story generator");

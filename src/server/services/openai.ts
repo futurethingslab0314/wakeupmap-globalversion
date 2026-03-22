@@ -24,6 +24,13 @@ export function createOpenAIClient(options: CreateOpenAIClientOptions): OpenAICl
             { role: "system", content: request.systemPrompt },
             { role: "user", content: request.userPrompt },
           ],
+          ...(request.responseFormat
+            ? {
+                text: {
+                  format: request.responseFormat,
+                },
+              }
+            : {}),
         }),
       });
 

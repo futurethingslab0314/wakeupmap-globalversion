@@ -68,6 +68,14 @@ export interface NormalizedNotionRecord {
 export interface OpenAITextRequest {
   systemPrompt: string;
   userPrompt: string;
+  responseFormat?: {
+    type: "json_schema";
+    json_schema: {
+      name: string;
+      schema: Record<string, unknown>;
+      strict?: boolean;
+    };
+  };
 }
 
 export interface OpenAIImageRequest {
