@@ -15,6 +15,7 @@ export interface CityMappingRecord {
 export interface WakeUpNowRequest {
   language: "en" | "zh";
   nowUtcIso?: string;
+  userName?: string;
 }
 
 export interface WakeUpNowResult {
@@ -66,9 +67,34 @@ export interface OpenAIImageRequest {
   prompt: string;
 }
 
+export interface OpenAIImageResult {
+  imageBinary: Uint8Array;
+  prompt: string;
+}
+
 export interface OpenAIClient {
   generateText(request: OpenAITextRequest): Promise<string>;
   generateImage(request: OpenAIImageRequest): Promise<Uint8Array>;
+}
+
+export interface StoryResult {
+  story: string;
+  storyZh: string;
+}
+
+export interface BreakfastConcept {
+  name: string;
+  nameZh: string;
+  description: string;
+  descriptionZh: string;
+  highlightIngredients: string[];
+}
+
+export interface RecipeResult {
+  title: string;
+  titleZh?: string;
+  recipe: string;
+  highlightIngredients: string[];
 }
 
 export interface NotionQueryResult {
