@@ -1,4 +1,5 @@
 import type { BreakfastConcept, OpenAIClient, RecipeResult } from "../types.ts";
+import { parseModelJson } from "../services/parseModelJson.ts";
 
 interface GenerateRecipeInput {
   openai: Pick<OpenAIClient, "generateText">;
@@ -28,5 +29,5 @@ export async function generateRecipe(input: GenerateRecipeInput): Promise<Recipe
     ].join("\n"),
   });
 
-  return JSON.parse(response) as RecipeResult;
+  return parseModelJson<RecipeResult>(response, "Recipe generator");
 }

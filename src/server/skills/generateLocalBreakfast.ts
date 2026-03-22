@@ -1,4 +1,5 @@
 import type { BreakfastConcept, CityMappingRecord, OpenAIClient } from "../types.ts";
+import { parseModelJson } from "../services/parseModelJson.ts";
 
 interface GenerateLocalBreakfastInput {
   openai: Pick<OpenAIClient, "generateText">;
@@ -18,5 +19,5 @@ export async function generateLocalBreakfast(
     ].join("\n"),
   });
 
-  return JSON.parse(response) as BreakfastConcept;
+  return parseModelJson<BreakfastConcept>(response, "Breakfast generator");
 }

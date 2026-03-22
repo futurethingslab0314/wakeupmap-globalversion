@@ -52,6 +52,25 @@ test("generateRecipe creates a practical bilingual single-serving recipe with ma
   assert.match(requests[0].userPrompt, /image prompt/i);
 });
 
+test("generateRecipe reports an empty JSON response with a clear error", async () => {
+  const openai = {
+    generateText: async () => "",
+  };
+
+  await assert.rejects(
+    () =>
+      generateRecipe({
+        openai,
+        breakfastConcept,
+        cityName: "Taipei",
+        countryName: "Taiwan",
+        cityNameZh: "台北",
+        countryNameZh: "台灣",
+      }),
+    /empty json/i,
+  );
+});
+
 test("generateBreakfastImage produces a constrained OpenAI image prompt consistent with recipe ingredients", async () => {
   const requests: OpenAIImageRequest[] = [];
   const openai = {

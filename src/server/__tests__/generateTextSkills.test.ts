@@ -73,6 +73,24 @@ test("generateStory builds bilingual output constraints including the required o
   assert.match(requests[0].userPrompt, /YT/);
 });
 
+test("generateStory accepts JSON wrapped in a markdown code fence", async () => {
+  const openai = {
+    generateText: async () => `\`\`\`json
+{"story":"Today you wake up in Taipei, Taiwan.","storyZh":"今天的你甦醒在台灣的台北。"}
+\`\`\``,
+  };
+
+  const result = await generateStory({
+    openai,
+    city: createCity(),
+    greeting: "早安！",
+    userName: "YT",
+  });
+
+  assert.equal(result.story, "Today you wake up in Taipei, Taiwan.");
+  assert.equal(result.storyZh, "今天的你甦醒在台灣的台北。");
+});
+
 test("generateLocalBreakfast returns concept fields and canonical highlightIngredients", async () => {
   const openai = {
     generateText: async () =>

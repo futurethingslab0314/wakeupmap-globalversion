@@ -1,4 +1,5 @@
 import type { CityMappingRecord, OpenAIClient, StoryResult } from "../types.ts";
+import { parseModelJson } from "../services/parseModelJson.ts";
 
 interface GenerateStoryInput {
   openai: Pick<OpenAIClient, "generateText">;
@@ -24,5 +25,5 @@ export async function generateStory(input: GenerateStoryInput): Promise<StoryRes
     ].join("\n"),
   });
 
-  return JSON.parse(response) as StoryResult;
+  return parseModelJson<StoryResult>(response, "Story generator");
 }

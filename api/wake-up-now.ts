@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { parseModelJson } from "../src/server/services/parseModelJson.ts";
 
 type NotionPropertyDefinition = {
   id?: string;
@@ -387,10 +388,6 @@ async function callOpenAIImage(prompt: string): Promise<Uint8Array> {
   return Uint8Array.from(Buffer.from(base64, "base64"));
 }
 
-function parseJson<T>(value: string): T {
-  return JSON.parse(value) as T;
-}
-
 async function generateGreeting(city: WorldCity): Promise<string> {
   return callOpenAIText(
     [
@@ -406,7 +403,7 @@ async function generateGreeting(city: WorldCity): Promise<string> {
 }
 
 async function generateStory(city: WorldCity, greeting: string, userName: string) {
-  return parseJson<{ story: string; storyZh: string }>(
+  return parseModelJson<{ story: string; storyZh: string }>(
     await callOpenAIText(
       [
         "Create a grounded bilingual wake-up vignette as JSON.",
@@ -422,11 +419,12 @@ async function generateStory(city: WorldCity, greeting: string, userName: string
         "Return JSON with keys story and storyZh.",
       ].join("\n"),
     ),
+    "Story generator",
   );
 }
 
 async function generateBreakfastConcept(city: WorldCity) {
-  return parseJson<{
+  return parseModelJson<{
     name: string;
     nameZh: string;
     description: string;
@@ -442,11 +440,12 @@ async function generateBreakfastConcept(city: WorldCity) {
         "highlightIngredients must be an array of short canonical ingredient names.",
       ].join("\n"),
     ),
+    "Breakfast generator",
   );
 }
 
 async function generateRecipe(city: WorldCity, breakfastConcept: Awaited<ReturnType<typeof generateBreakfastConcept>>) {
-  return parseJson<RecipeResult>(
+  return parseModelJson<RecipeResult>(
     await callOpenAIText(
       [
         "Create a practical bilingual single-serving recipe as JSON.",
@@ -464,6 +463,7 @@ async function generateRecipe(city: WorldCity, breakfastConcept: Awaited<ReturnT
         "Return JSON with title, titleZh, recipe, recipeZh, highlightIngredients, imagePrompt.",
       ].join("\n"),
     ),
+    "Recipe generator",
   );
 }
 
