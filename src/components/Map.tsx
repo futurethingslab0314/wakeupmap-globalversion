@@ -9,6 +9,7 @@ import {
 } from "react-simple-maps";
 import { NotionRecord } from "../types";
 import { getRecordCity, UiLanguage } from "../i18n";
+import { getLatestRecord } from "../mapSelection";
 import { motion } from "motion/react";
 import { geoOrthographic } from "d3-geo";
 import { soundService } from "../services/soundService";
@@ -41,10 +42,10 @@ const Map: React.FC<MapProps> = ({
   const [lastMousePos, setLastMousePos] = useState<{ x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Center on the selected record, or the latest record (last in array)
+  // Center on the selected record, or the most recent record by recordedAtDate.
   useEffect(() => {
-    // Priority: 1. Selected Record, 2. Latest Record (last in array), 3. First Highlighted (Morning)
-    const targetId = selectedId || (records.length > 0 ? records[records.length - 1].id : (highlightedIds.length > 0 ? highlightedIds[0] : null));
+    const latestRecord = getLatestRecord(records);
+    const targetId = selectedId || latestRecord?.id || (highlightedIds.length > 0 ? highlightedIds[0] : null);
     
     if (targetId) {
       const record = records.find(r => r.id === targetId);
