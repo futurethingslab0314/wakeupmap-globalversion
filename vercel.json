@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/wake-up-now.ts": {
+      "includeFiles": "src/server/**,cities_data.json"
+    }
+  },
   "rewrites": [
     {
       "source": "/((?!api/).*)",
