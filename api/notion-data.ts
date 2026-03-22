@@ -54,6 +54,21 @@ function getFirstAvailableTitle(properties: Record<string, unknown>, keys: strin
   return "";
 }
 
+function getFirstAvailableProperty(
+  reader: (properties: Record<string, unknown>, key: string) => string,
+  properties: Record<string, unknown>,
+  keys: string[],
+): string {
+  for (const key of keys) {
+    const value = reader(properties, key);
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
 function getRichTextProperty(properties: Record<string, unknown>, key: string): string {
   const property = properties[key];
   if (typeof property !== "object" || property === null || !("rich_text" in property)) {
@@ -100,15 +115,22 @@ function getDateProperty(properties: Record<string, unknown>, key: string): stri
 
 function normalizePage(page: { id?: string; properties?: Record<string, unknown> }) {
   const properties = page.properties ?? {};
-  const city =
-    getRichTextProperty(properties, "City") ||
-    getTitleProperty(properties, "City");
-  const cityZh = getRichTextProperty(properties, "City ZH") || city;
-  const country = getRichTextProperty(properties, "Country");
-  const countryZh = getRichTextProperty(properties, "Country ZH") || country;
-  const story = getRichTextProperty(properties, "Story");
-  const storyZh = getRichTextProperty(properties, "Story ZH") || story;
-  const recordedAtDate = getDateProperty(properties, "Recorded At");
+  const city = getFirstAvailableProperty(getRichTextProperty, properties, ["City", "city"]) ||
+    getFirstAvailableProperty(getTitleProperty, properties, ["City", "city"]);
+  const cityZh = getFirstAvailableProperty(getRichTextProperty, properties, ["City ZH", "city zh", "cityZh", "city_zh"]) || city;
+  const country = getFirstAvailableProperty(getRichTextProperty, properties, ["Country", "country"]);
+  const countryZh = getFirstAvailableProperty(getRichTextProperty, properties, ["Country ZH", "country zh", "countryZh", "country_zh"]) || country;
+  const greeting = getFirstAvailableProperty(getRichTextProperty, properties, ["Greeting", "greeting"]);
+  const story = getFirstAvailableProperty(getRichTextProperty, properties, ["Story", "story"]);
+  const storyZh = getFirstAvailableProperty(getRichTextProperty, properties, ["Story ZH", "story zh", "storyZh", "story_zh"]) || story;
+  const recipe = getFirstAvailableProperty(getRichTextProperty, properties, ["Recipe", "recipe"]);
+  const imageUrl = getFirstAvailableProperty(getUrlProperty, properties, ["Image URL", "image url", "imageUrl", "image"]);
+  const recordedAtDate =
+    getDateProperty(properties, "recordedAtDate") ??
+    getDateProperty(properties, "recordedAt") ??
+    getDateProperty(properties, "Recorded At") ??
+    getDateProperty(properties, "recorded at") ??
+    getDateProperty(properties, "Date");
   const userName = getFirstAvailableTitle(properties, ["userName", "User Name", "Name"]);
 
   return {
@@ -117,14 +139,17 @@ function normalizePage(page: { id?: string; properties?: Record<string, unknown>
     city_zh: cityZh,
     country,
     country_zh: countryZh,
-    greeting: getRichTextProperty(properties, "Greeting"),
+    greeting,
     story,
     story_zh: storyZh,
-    recipe: getRichTextProperty(properties, "Recipe"),
-    imageUrl: getUrlProperty(properties, "Image URL"),
-    latitude: getNumberProperty(properties, "Latitude"),
-    longitude: getNumberProperty(properties, "Longitude"),
-    utcOffset: getNumberProperty(properties, "UTC Offset"),
+    recipe,
+    imageUrl,
+    latitude: getNumberProperty(properties, "Latitude") || getNumberProperty(properties, "latitude"),
+    longitude:
+      getNumberProperty(properties, "Longitude") ||
+      getNumberProperty(properties, "longitude") ||
+      getNumberProperty(properties, "longtitude"),
+    utcOffset: getNumberProperty(properties, "UTC Offset") || getNumberProperty(properties, "utc offset"),
     recordedAtDate,
   };
 }

@@ -46,12 +46,42 @@ const cityCandidates = [
   },
 ];
 
+type NotionPropertyDefinition = {
+  id?: string;
+  name?: string;
+  type?: string;
+};
+
+type NotionDatabaseResponse = {
+  properties?: Record<string, NotionPropertyDefinition>;
+};
+
 function getMinuteDiffToEight(nowIso: string, utcOffset: number) {
   const now = new Date(nowIso);
   const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
   const localMinutes = utcMinutes + utcOffset * 60;
   const normalized = ((localMinutes % 1440) + 1440) % 1440;
   return Math.abs(normalized - 480);
+}
+
+function normalizeKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s_-]+/g, "");
+}
+
+function findPropertyName(
+  properties: Record<string, NotionPropertyDefinition>,
+  type: string,
+  aliases: string[],
+): string | undefined {
+  const aliasSet = new Set(aliases.map(normalizeKey));
+
+  for (const [name, definition] of Object.entries(properties)) {
+    if (definition.type === type && aliasSet.has(normalizeKey(name))) {
+      return name;
+    }
+  }
+
+  return undefined;
 }
 
 async function callOpenAIText(prompt: string) {
@@ -80,7 +110,9 @@ async function callOpenAIText(prompt: string) {
   return data.output_text ?? null;
 }
 
-function buildNotionProperties(record: {
+function buildNotionProperties(
+  schema: Record<string, NotionPropertyDefinition>,
+  record: {
   userName: string;
   city: string;
   cityZh: string;
@@ -96,52 +128,76 @@ function buildNotionProperties(record: {
   utcOffset: number;
   recordedAtDate: string;
 }) {
-  return {
-    userName: {
+  const properties: Record<string, unknown> = {};
+
+  const titleName = findPropertyName(schema, "title", ["userName", "user name", "name", "title"]);
+  if (titleName) {
+    properties[titleName] = {
       title: [{ text: { content: record.userName } }],
-    },
-    City: {
-      rich_text: [{ text: { content: record.city } }],
-    },
-    "City ZH": {
-      rich_text: [{ text: { content: record.cityZh } }],
-    },
-    Country: {
-      rich_text: [{ text: { content: record.country } }],
-    },
-    "Country ZH": {
-      rich_text: [{ text: { content: record.countryZh } }],
-    },
-    Greeting: {
-      rich_text: [{ text: { content: record.greeting } }],
-    },
-    Story: {
-      rich_text: [{ text: { content: record.story } }],
-    },
-    "Story ZH": {
-      rich_text: [{ text: { content: record.storyZh } }],
-    },
-    Recipe: {
-      rich_text: [{ text: { content: record.recipe } }],
-    },
-    Latitude: {
-      number: record.latitude,
-    },
-    Longitude: {
-      number: record.longitude,
-    },
-    "UTC Offset": {
-      number: record.utcOffset,
-    },
-    "Image URL": {
-      url: record.imageUrl,
-    },
-    "Recorded At": {
+    };
+  }
+
+  const richTextMappings: Array<[string[], string]> = [
+    [["city"], record.city],
+    [["city zh", "cityzh", "city_zh"], record.cityZh],
+    [["country"], record.country],
+    [["country zh", "countryzh", "country_zh"], record.countryZh],
+    [["greeting"], record.greeting],
+    [["story"], record.story],
+    [["story zh", "storyzh", "story_zh"], record.storyZh],
+    [["recipe"], record.recipe],
+    [["recipe zh", "recipezh", "recipe_zh"], record.recipe],
+    [["local time", "localtime"], new Date(record.recordedAtDate).toLocaleString("en-US", { timeZone: "UTC" })],
+  ];
+
+  for (const [aliases, value] of richTextMappings) {
+    const propertyName = findPropertyName(schema, "rich_text", aliases);
+    if (propertyName) {
+      properties[propertyName] = {
+        rich_text: [{ text: { content: value } }],
+      };
+    }
+  }
+
+  const numberMappings: Array<[string[], number]> = [
+    [["latitude"], record.latitude],
+    [["longitude", "longtitude"], record.longitude],
+    [["utc offset", "utcoffset"], record.utcOffset],
+  ];
+
+  for (const [aliases, value] of numberMappings) {
+    const propertyName = findPropertyName(schema, "number", aliases);
+    if (propertyName) {
+      properties[propertyName] = {
+        number: value,
+      };
+    }
+  }
+
+  const imageUrlName = findPropertyName(schema, "url", ["image url", "imageurl", "image"]);
+  if (imageUrlName) {
+    properties[imageUrlName] = { url: record.imageUrl };
+  }
+
+  const imageStorageKeyName = findPropertyName(schema, "url", ["imagestoragekey", "image storage key"]);
+  if (imageStorageKeyName) {
+    properties[imageStorageKeyName] = { url: record.imageUrl };
+  }
+
+  const recordedAtNames = [
+    findPropertyName(schema, "date", ["recordedatdate", "recorded at date"]),
+    findPropertyName(schema, "date", ["recordedat", "recorded at", "date"]),
+  ].filter((value): value is string => Boolean(value));
+
+  for (const recordedAtName of recordedAtNames) {
+    properties[recordedAtName] = {
       date: {
         start: record.recordedAtDate,
       },
-    },
-  };
+    };
+  }
+
+  return properties;
 }
 
 export default async function handler(
@@ -164,6 +220,22 @@ export default async function handler(
     if (!apiKey || !databaseId) {
       return response.status(500).json({ error: "Missing NOTION_API_KEY or NOTION_DATABASE_ID" });
     }
+
+    const databaseResponse = await fetch(`https://api.notion.com/v1/databases/${databaseId}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Notion-Version": "2022-06-28",
+      },
+    });
+
+    if (!databaseResponse.ok) {
+      const errorPayload = await databaseResponse.text();
+      throw new Error(`Notion database fetch failed: ${databaseResponse.status} ${errorPayload}`);
+    }
+
+    const database = (await databaseResponse.json()) as NotionDatabaseResponse;
+    const schema = database.properties ?? {};
 
     const nowIso = new Date().toISOString();
     const city = [...cityCandidates].sort(
@@ -205,7 +277,7 @@ export default async function handler(
       },
       body: JSON.stringify({
         parent: { database_id: databaseId },
-        properties: buildNotionProperties({
+        properties: buildNotionProperties(schema, {
           userName: notionUserName,
           city: city.city,
           cityZh: city.cityZh,
