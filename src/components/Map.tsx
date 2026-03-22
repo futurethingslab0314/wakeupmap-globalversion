@@ -235,7 +235,6 @@ const Map: React.FC<MapProps> = ({
                 animate={{ 
                   scale: isHighlighted ? 1.2 : 1,
                 }}
-                whileHover={{ scale: 1.5 }}
                 onClick={() => onSelectRecord(record)}
                 className="cursor-pointer"
               >
