@@ -11,6 +11,7 @@ export default function App() {
   const [records, setRecords] = useState<NotionRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<NotionRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [wakeUpLoading, setWakeUpLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDatabase, setShowDatabase] = useState(false);
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
@@ -36,7 +37,8 @@ export default function App() {
     try {
       const response = await fetch("/api/notion-data");
       if (!response.ok) {
-        throw new Error("Failed to fetch data");
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error ?? "Failed to fetch data");
       }
       const data = await response.json();
       setRecords(data);
@@ -44,6 +46,40 @@ export default function App() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleWakeUpNow = async () => {
+    setWakeUpLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/wake-up-now", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          language: "en",
+          userName: userName.trim() || undefined,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "Failed to run Wake Up Now");
+      }
+
+      if (payload?.record) {
+        setSelectedRecord(payload.record);
+      }
+
+      await fetchData();
+      soundService.playSuccess();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setWakeUpLoading(false);
     }
   };
 
@@ -284,15 +320,22 @@ export default function App() {
             whileHover={{ scale: 1.02, x: 5 }}
             whileTap={{ scale: 0.98 }}
             onMouseEnter={() => soundService.playHover()}
-            onClick={findMorningLocations}
+            onClick={handleWakeUpNow}
+            disabled={wakeUpLoading}
             className="flex items-center justify-center gap-3 bg-white text-black border border-black px-8 py-4 rounded-none font-mono text-[12px] font-bold uppercase tracking-[0.2em] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,255,0,1)] transition-all group overflow-hidden relative"
           >
             <div 
               className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity" 
               style={{ backgroundColor: '#45e945' }}
             />
-            <Sun className="w-4 h-4 text-black relative z-10" />
-            <span className="relative z-10 text-black">Wake Up Now</span>
+            {wakeUpLoading ? (
+              <Loader2 className="w-4 h-4 text-black relative z-10 animate-spin" />
+            ) : (
+              <Sun className="w-4 h-4 text-black relative z-10" />
+            )}
+            <span className="relative z-10 text-black">
+              {wakeUpLoading ? "Generating..." : "Wake Up Now"}
+            </span>
             <div className="w-2 h-2 bg-black rounded-none animate-pulse relative z-10" />
           </motion.button>
 

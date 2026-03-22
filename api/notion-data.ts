@@ -1,4 +1,6 @@
-const locations = [
+import { Client } from "@notionhq/client";
+
+const fallbackLocations = [
   {
     id: "1",
     city: "Taipei",
@@ -14,142 +16,106 @@ const locations = [
     imageUrl: "https://picsum.photos/seed/taipei/800/600",
     greeting: "Zao An!",
   },
-  {
-    id: "2",
-    city: "Tokyo",
-    city_zh: "東京",
-    country: "Japan",
-    country_zh: "日本",
-    longitude: 139.6917,
-    latitude: 35.6895,
-    utcOffset: 9,
-    story: "A quiet morning with a traditional Japanese breakfast: grilled fish, miso soup, and rice.",
-    story_zh: "寧靜的早晨，享用傳統日式早餐：烤魚、味噌湯和米飯。",
-    recipe: "Grilled Mackerel with Miso Soup",
-    imageUrl: "https://picsum.photos/seed/tokyo/800/600",
-    greeting: "Ohayou Gozaimasu!",
-  },
-  {
-    id: "3",
-    city: "Paris",
-    city_zh: "巴黎",
-    country: "France",
-    country_zh: "法國",
-    longitude: 2.3522,
-    latitude: 48.8566,
-    utcOffset: 1,
-    story: "The golden crust of a fresh croissant from the boulangerie around the corner.",
-    story_zh: "轉角麵包店新鮮出爐的可頌，帶著金黃酥脆的外皮。",
-    recipe: "Butter Croissant & Café au Lait",
-    imageUrl: "https://picsum.photos/seed/paris/800/600",
-    greeting: "Bonjour!",
-  },
-  {
-    id: "4",
-    city: "New York",
-    city_zh: "紐約",
-    country: "USA",
-    country_zh: "美國",
-    longitude: -74.006,
-    latitude: 40.7128,
-    utcOffset: -5,
-    story: "A classic everything bagel with cream cheese while walking through Central Park.",
-    story_zh: "走在中央公園時，手裡拿著經典的奶油乳酪貝果。",
-    recipe: "Everything Bagel with Lox and Cream Cheese",
-    imageUrl: "https://picsum.photos/seed/nyc/800/600",
-    greeting: "Good Morning!",
-  },
-  {
-    id: "5",
-    city: "London",
-    city_zh: "倫敦",
-    country: "UK",
-    country_zh: "英國",
-    longitude: -0.1278,
-    latitude: 51.5074,
-    utcOffset: 0,
-    story: "A hearty full English breakfast to start a misty morning by the Thames.",
-    story_zh: "在泰晤士河畔霧濛濛的早晨，享用豐盛的全套英式早餐。",
-    recipe: "Full English Breakfast (Eggs, Bacon, Sausage, Beans, Toast)",
-    imageUrl: "https://picsum.photos/seed/london/800/600",
-    greeting: "Morning, mate!",
-  },
-  {
-    id: "6",
-    city: "Sydney",
-    city_zh: "雪梨",
-    country: "Australia",
-    country_zh: "澳洲",
-    longitude: 151.2093,
-    latitude: -33.8688,
-    utcOffset: 11,
-    story: "Avocado toast with a flat white, overlooking the Opera House.",
-    story_zh: "看著歌劇院，享用酪梨吐司配上一杯平白咖啡。",
-    recipe: "Smashed Avocado on Sourdough with Poached Eggs",
-    imageUrl: "https://picsum.photos/seed/sydney/800/600",
-    greeting: "G'day!",
-  },
-  {
-    id: "7",
-    city: "Bangkok",
-    city_zh: "曼谷",
-    country: "Thailand",
-    country_zh: "泰國",
-    longitude: 100.5018,
-    latitude: 13.7563,
-    utcOffset: 7,
-    story: "Sweet and savory Jok (rice porridge) from a street stall as the city wakes up.",
-    story_zh: "城市甦醒時，路邊攤傳來熱騰騰 Jok（泰式稀飯）的鹹甜香氣。",
-    recipe: "Jok (Thai Rice Congee) with Ginger and Pork",
-    imageUrl: "https://picsum.photos/seed/bangkok/800/600",
-    greeting: "Sawadee Krab!",
-  },
-  {
-    id: "8",
-    city: "Istanbul",
-    city_zh: "伊斯坦堡",
-    country: "Turkey",
-    country_zh: "土耳其",
-    longitude: 28.9784,
-    latitude: 41.0082,
-    utcOffset: 3,
-    story: "A massive Turkish breakfast spread (Kahvaltı) with olives, cheeses, and honey.",
-    story_zh: "豐盛的土耳其早餐（Kahvaltı），擺滿了橄欖、起司和蜂蜜。",
-    recipe: "Menemen (Turkish Scrambled Eggs with Tomatoes and Peppers)",
-    imageUrl: "https://picsum.photos/seed/istanbul/800/600",
-    greeting: "Günaydın!",
-  },
-  {
-    id: "9",
-    city: "Mexico City",
-    city_zh: "墨西哥城",
-    country: "Mexico",
-    country_zh: "墨西哥",
-    longitude: -99.1332,
-    latitude: 19.4326,
-    utcOffset: -6,
-    story: "Spicy Chilaquiles that kickstart the senses in the heart of the city.",
-    story_zh: "在城市中心，用香辣的 Chilaquiles 喚醒全身感官。",
-    recipe: "Chilaquiles Verdes with Fried Egg",
-    imageUrl: "https://picsum.photos/seed/mexico/800/600",
-    greeting: "¡Buenos días!",
-  },
-  {
-    id: "10",
-    city: "Cairo",
-    city_zh: "開羅",
-    country: "Egypt",
-    country_zh: "埃及",
-    longitude: 31.2357,
-    latitude: 30.0444,
-    utcOffset: 2,
-    story: "Warm Ful Medames served with pita bread under the morning sun.",
-    story_zh: "在晨曦下，享用配著皮塔餅的溫熱 Ful Medames。",
-    recipe: "Ful Medames (Stewed Fava Beans with Cumin and Lemon)",
-    imageUrl: "https://picsum.photos/seed/cairo/800/600",
-    greeting: "Sabah el khair!",
-  },
 ];
+
+function getPlainText(value: unknown): string {
+  if (!Array.isArray(value)) {
+    return "";
+  }
+
+  return value
+    .map((item) => {
+      if (typeof item === "object" && item !== null && "plain_text" in item) {
+        const plainText = (item as { plain_text?: unknown }).plain_text;
+        return typeof plainText === "string" ? plainText : "";
+      }
+
+      return "";
+    })
+    .join("")
+    .trim();
+}
+
+function getTitleProperty(properties: Record<string, unknown>, key: string): string {
+  const property = properties[key];
+  if (typeof property !== "object" || property === null || !("title" in property)) {
+    return "";
+  }
+
+  return getPlainText((property as { title?: unknown }).title);
+}
+
+function getRichTextProperty(properties: Record<string, unknown>, key: string): string {
+  const property = properties[key];
+  if (typeof property !== "object" || property === null || !("rich_text" in property)) {
+    return "";
+  }
+
+  return getPlainText((property as { rich_text?: unknown }).rich_text);
+}
+
+function getNumberProperty(properties: Record<string, unknown>, key: string): number {
+  const property = properties[key];
+  if (typeof property !== "object" || property === null || !("number" in property)) {
+    return 0;
+  }
+
+  const value = (property as { number?: unknown }).number;
+  return typeof value === "number" ? value : 0;
+}
+
+function getUrlProperty(properties: Record<string, unknown>, key: string): string {
+  const property = properties[key];
+  if (typeof property !== "object" || property === null || !("url" in property)) {
+    return "";
+  }
+
+  const value = (property as { url?: unknown }).url;
+  return typeof value === "string" ? value : "";
+}
+
+function getDateProperty(properties: Record<string, unknown>, key: string): string | undefined {
+  const property = properties[key];
+  if (typeof property !== "object" || property === null || !("date" in property)) {
+    return undefined;
+  }
+
+  const date = (property as { date?: unknown }).date;
+  if (typeof date !== "object" || date === null || !("start" in date)) {
+    return undefined;
+  }
+
+  const start = (date as { start?: unknown }).start;
+  return typeof start === "string" ? start : undefined;
+}
+
+function normalizePage(page: { id?: string; properties?: Record<string, unknown> }) {
+  const properties = page.properties ?? {};
+  const city = getTitleProperty(properties, "City");
+  const cityZh = getRichTextProperty(properties, "City ZH") || city;
+  const country = getRichTextProperty(properties, "Country");
+  const countryZh = getRichTextProperty(properties, "Country ZH") || country;
+  const story = getRichTextProperty(properties, "Story");
+  const storyZh = getRichTextProperty(properties, "Story ZH") || story;
+  const recordedAtDate = getDateProperty(properties, "Recorded At");
+
+  return {
+    id: page.id ?? "",
+    city,
+    city_zh: cityZh,
+    country,
+    country_zh: countryZh,
+    greeting: getRichTextProperty(properties, "Greeting"),
+    story,
+    story_zh: storyZh,
+    recipe: getRichTextProperty(properties, "Recipe"),
+    imageUrl: getUrlProperty(properties, "Image URL"),
+    latitude: getNumberProperty(properties, "Latitude"),
+    longitude: getNumberProperty(properties, "Longitude"),
+    utcOffset: getNumberProperty(properties, "UTC Offset"),
+    recordedAtDate,
+  };
+}
 
 export default async function handler(
   request: { method?: string },
@@ -165,7 +131,23 @@ export default async function handler(
       return response.status(405).json({ error: "Method Not Allowed" });
     }
 
-    return response.status(200).json(locations);
+    const apiKey = process.env.NOTION_API_KEY;
+    const databaseId = process.env.NOTION_DATABASE_ID;
+
+    if (!apiKey || !databaseId) {
+      return response.status(200).json(fallbackLocations);
+    }
+
+    const notion = new Client({ auth: apiKey });
+    const queryResponse = await notion.databases.query({
+      database_id: databaseId,
+    });
+
+    const records = queryResponse.results
+      .map((page) => normalizePage(page as { id?: string; properties?: Record<string, unknown> }))
+      .filter((record) => record.city);
+
+    return response.status(200).json(records.length > 0 ? records : fallbackLocations);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return response.status(500).json({ error: message });
