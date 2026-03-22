@@ -81,6 +81,7 @@ async function callOpenAIText(prompt: string) {
 }
 
 function buildNotionProperties(record: {
+  userName: string;
   city: string;
   cityZh: string;
   country: string;
@@ -96,8 +97,11 @@ function buildNotionProperties(record: {
   recordedAtDate: string;
 }) {
   return {
+    userName: {
+      title: [{ text: { content: record.userName } }],
+    },
     City: {
-      title: [{ text: { content: record.city } }],
+      rich_text: [{ text: { content: record.city } }],
     },
     "City ZH": {
       rich_text: [{ text: { content: record.cityZh } }],
@@ -190,6 +194,7 @@ export default async function handler(
 
     const recordedAtDate = new Date().toISOString();
     const imageUrl = `https://picsum.photos/seed/${city.id}-${recordedAtDate}/800/600`;
+    const notionUserName = request.body?.userName?.trim() || `${city.city} Wake Up`;
 
     const createPageResponse = await fetch("https://api.notion.com/v1/pages", {
       method: "POST",
@@ -201,6 +206,7 @@ export default async function handler(
       body: JSON.stringify({
         parent: { database_id: databaseId },
         properties: buildNotionProperties({
+          userName: notionUserName,
           city: city.city,
           cityZh: city.cityZh,
           country: city.country,

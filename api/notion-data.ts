@@ -43,6 +43,17 @@ function getTitleProperty(properties: Record<string, unknown>, key: string): str
   return getPlainText((property as { title?: unknown }).title);
 }
 
+function getFirstAvailableTitle(properties: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = getTitleProperty(properties, key);
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
 function getRichTextProperty(properties: Record<string, unknown>, key: string): string {
   const property = properties[key];
   if (typeof property !== "object" || property === null || !("rich_text" in property)) {
@@ -89,16 +100,19 @@ function getDateProperty(properties: Record<string, unknown>, key: string): stri
 
 function normalizePage(page: { id?: string; properties?: Record<string, unknown> }) {
   const properties = page.properties ?? {};
-  const city = getTitleProperty(properties, "City");
+  const city =
+    getRichTextProperty(properties, "City") ||
+    getTitleProperty(properties, "City");
   const cityZh = getRichTextProperty(properties, "City ZH") || city;
   const country = getRichTextProperty(properties, "Country");
   const countryZh = getRichTextProperty(properties, "Country ZH") || country;
   const story = getRichTextProperty(properties, "Story");
   const storyZh = getRichTextProperty(properties, "Story ZH") || story;
   const recordedAtDate = getDateProperty(properties, "Recorded At");
+  const userName = getFirstAvailableTitle(properties, ["userName", "User Name", "Name"]);
 
   return {
-    id: page.id ?? "",
+    id: page.id ?? userName ?? "",
     city,
     city_zh: cityZh,
     country,
