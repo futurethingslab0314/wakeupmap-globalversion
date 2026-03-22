@@ -1,3 +1,4 @@
+import { createHash, createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 type NotionPropertyDefinition = {
@@ -617,6 +618,73 @@ function buildR2PublicUrl(publicUrlBase: string, key: string): string {
   return `${publicUrlBase.replace(/\/$/, "")}/${key}`;
 }
 
+function toAmzDate(date: Date): string {
+  return date.toISOString().replace(/[:-]|\.\d{3}/g, "");
+}
+
+function hashSha256(value: string | Uint8Array): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function hmacSha256(key: string | Uint8Array, value: string): Buffer {
+  return createHmac("sha256", key).update(value).digest();
+}
+
+function encodeR2Key(key: string): string {
+  return key.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+}
+
+function signR2Request(options: {
+  method: string;
+  url: URL;
+  accessKeyId: string;
+  secretAccessKey: string;
+  body: Uint8Array;
+  contentType: string;
+  now?: Date;
+}) {
+  const now = options.now ?? new Date();
+  const amzDate = toAmzDate(now);
+  const dateStamp = amzDate.slice(0, 8);
+  const payloadHash = hashSha256(options.body);
+  const host = options.url.host;
+  const canonicalHeaders =
+    `content-type:${options.contentType}\n` +
+    `host:${host}\n` +
+    `x-amz-content-sha256:${payloadHash}\n` +
+    `x-amz-date:${amzDate}\n`;
+  const signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date";
+  const canonicalRequest = [
+    options.method,
+    options.url.pathname,
+    "",
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join("\n");
+  const credentialScope = `${dateStamp}/auto/s3/aws4_request`;
+  const stringToSign = [
+    "AWS4-HMAC-SHA256",
+    amzDate,
+    credentialScope,
+    hashSha256(canonicalRequest),
+  ].join("\n");
+  const kDate = hmacSha256(`AWS4${options.secretAccessKey}`, dateStamp);
+  const kRegion = hmacSha256(kDate, "auto");
+  const kService = hmacSha256(kRegion, "s3");
+  const kSigning = hmacSha256(kService, "aws4_request");
+  const signature = createHmac("sha256", kSigning).update(stringToSign).digest("hex");
+  const authorization =
+    `AWS4-HMAC-SHA256 Credential=${options.accessKeyId}/${credentialScope}, ` +
+    `SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  return {
+    authorization,
+    amzDate,
+    payloadHash,
+  };
+}
+
 async function uploadToR2(cityName: string, recordedAtIso: string, imageBinary: Uint8Array) {
   const endpoint = process.env.CLOUDFLARE_R2_ENDPOINT;
   const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
@@ -629,14 +697,23 @@ async function uploadToR2(cityName: string, recordedAtIso: string, imageBinary: 
   }
 
   const key = `wake-up-now/${slugify(cityName)}/${recordedAtIso.toLowerCase().replace(/[:.]/g, "-")}.png`;
-  const url = `${endpoint.replace(/\/$/, "")}/${bucket}/${key}`;
-  const authToken = Buffer.from(`${accessKeyId}:${secretAccessKey}`).toString("base64");
+  const url = new URL(`${endpoint.replace(/\/$/, "")}/${bucket}/${encodeR2Key(key)}`);
+  const signature = signR2Request({
+    method: "PUT",
+    url,
+    accessKeyId,
+    secretAccessKey,
+    body: imageBinary,
+    contentType: "image/png",
+  });
 
   const response = await fetch(url, {
     method: "PUT",
     headers: {
-      Authorization: `Basic ${authToken}`,
+      Authorization: signature.authorization,
       "Content-Type": "image/png",
+      "x-amz-content-sha256": signature.payloadHash,
+      "x-amz-date": signature.amzDate,
     },
     body: Buffer.from(imageBinary),
   });
