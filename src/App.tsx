@@ -418,7 +418,7 @@ export default function App() {
               <p className="text-[10px] font-mono text-gray-400 uppercase tracking-[0.25em]">
                 {text.globalBreakfastNetwork}
               </p>
-              <p className="text-[9px] font-mono text-accent-neon font-bold uppercase tracking-[0.3em]">
+              <p className="text-[9px] font-mono text-black font-bold uppercase tracking-[0.3em]">
                 {visibleRecords.length} {text.locationsDiscovered}
               </p>
             </div>
@@ -453,21 +453,21 @@ export default function App() {
             onMouseEnter={() => soundService.playHover()}
             onClick={handleWakeUpNow}
             disabled={wakeUpLoading}
-            className="flex items-center justify-center gap-3 bg-white text-black border border-black px-8 py-4 rounded-none font-mono text-[12px] font-bold uppercase tracking-[0.2em] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,255,0,1)] transition-all group overflow-hidden relative"
+            className={`flex items-center justify-center gap-3 border px-8 py-4 rounded-none font-mono text-[12px] font-bold uppercase tracking-[0.2em] transition-all overflow-hidden relative ${
+              wakeUpLoading
+                ? "bg-white text-black border-black/20 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)]"
+                : "bg-accent-neon text-white border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:brightness-110"
+            }`}
           >
-            <div 
-              className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity" 
-              style={{ backgroundColor: '#45e945' }}
-            />
             {wakeUpLoading ? (
-              <Loader2 className="w-4 h-4 text-black relative z-10 animate-spin" />
+              <Loader2 className="w-4 h-4 text-black animate-spin" />
             ) : (
-              <Sun className="w-4 h-4 text-black relative z-10" />
+              <Sun className="w-4 h-4 text-white" />
             )}
-            <span className="relative z-10 text-black">
+            <span className={wakeUpLoading ? "text-black" : "text-white"}>
               {wakeUpLoading ? text.generating : text.wakeUpNow}
             </span>
-            <div className="w-2 h-2 bg-black rounded-none animate-pulse relative z-10" />
+            <div className={`w-2 h-2 rounded-none animate-pulse ${wakeUpLoading ? "bg-black/30" : "bg-white"}`} />
           </motion.button>
 
           <div className="flex flex-col gap-4 mt-4">
