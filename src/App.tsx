@@ -73,9 +73,24 @@ export default function App() {
         }),
       });
 
-      const payload = await response.json().catch(() => null);
+      const rawResponse = await response.text();
+      let payload: any = null;
+
+      if (rawResponse) {
+        try {
+          payload = JSON.parse(rawResponse);
+        } catch {
+          throw new Error(
+            `Wake Up Now returned invalid JSON (${response.status}): ${rawResponse.trim() || "empty response"}`,
+          );
+        }
+      }
+
       if (!response.ok) {
-        throw new Error(payload?.error ?? "Failed to run Wake Up Now");
+        const detail =
+          payload?.error ??
+          (rawResponse.trim() ? rawResponse.trim() : `Empty response from /api/wake-up-now (${response.status})`);
+        throw new Error(`Wake Up Now failed (${response.status}): ${detail}`);
       }
 
       if (payload?.record) {
