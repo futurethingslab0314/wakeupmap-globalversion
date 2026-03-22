@@ -456,18 +456,18 @@ export default function App() {
             className={`flex items-center justify-center gap-3 border px-8 py-4 rounded-none font-mono text-[12px] font-bold uppercase tracking-[0.2em] transition-all overflow-hidden relative ${
               wakeUpLoading
                 ? "bg-white text-black border-black/20 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)]"
-                : "bg-accent-neon text-white border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:brightness-110"
+                : "bg-accent-neon text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:brightness-110"
             }`}
           >
             {wakeUpLoading ? (
               <Loader2 className="w-4 h-4 text-black animate-spin" />
             ) : (
-              <Sun className="w-4 h-4 text-white" />
+              <Sun className="w-4 h-4 text-black" />
             )}
-            <span className={wakeUpLoading ? "text-black" : "text-white"}>
+            <span className="text-black">
               {wakeUpLoading ? text.generating : text.wakeUpNow}
             </span>
-            <div className={`w-2 h-2 rounded-none animate-pulse ${wakeUpLoading ? "bg-black/30" : "bg-white"}`} />
+            <div className={`w-2 h-2 rounded-none animate-pulse ${wakeUpLoading ? "bg-black/30" : "bg-black"}`} />
           </motion.button>
 
           <div className="flex flex-col gap-4 mt-4">
