@@ -21,3 +21,12 @@ export function getLatestRecordForUser(records: NotionRecord[], userName: string
   const matchedRecords = records.filter((record) => record.userName?.trim().toLowerCase() === normalizedUserName);
   return getLatestRecord(matchedRecords);
 }
+
+export function filterRecordsForUser(records: NotionRecord[], userName: string): NotionRecord[] {
+  const normalizedUserName = userName.trim().toLowerCase();
+  if (!normalizedUserName) {
+    return records;
+  }
+
+  return records.filter((record) => record.userName?.trim().toLowerCase() === normalizedUserName);
+}

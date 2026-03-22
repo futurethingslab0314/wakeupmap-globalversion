@@ -43,9 +43,13 @@ const Map: React.FC<MapProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Center on the selected record, or the most recent record by recordedAtDate.
-  useEffect(() => {
+  const focusedRecordId = React.useMemo(() => {
     const latestRecord = getLatestRecord(records);
-    const targetId = selectedId || latestRecord?.id || (highlightedIds.length > 0 ? highlightedIds[0] : null);
+    return selectedId || latestRecord?.id || (highlightedIds.length > 0 ? highlightedIds[0] : undefined);
+  }, [selectedId, records, highlightedIds]);
+
+  useEffect(() => {
+    const targetId = focusedRecordId ?? null;
     
     if (targetId) {
       const record = records.find(r => r.id === targetId);
@@ -53,7 +57,7 @@ const Map: React.FC<MapProps> = ({
         onRotationChange([-record.longitude, -record.latitude, 0]);
       }
     }
-  }, [selectedId, highlightedIds, records, onRotationChange]);
+  }, [focusedRecordId, records, onRotationChange]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -216,7 +220,7 @@ const Map: React.FC<MapProps> = ({
         </g>
 
         {records.map((record) => {
-          const isSelected = selectedId === record.id;
+          const isSelected = focusedRecordId === record.id;
           const isHighlighted = highlightedIds.includes(record.id);
           const long = parseFloat(record.longitude as any);
           const lat = parseFloat(record.latitude as any);

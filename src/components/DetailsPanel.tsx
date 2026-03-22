@@ -16,6 +16,7 @@ interface DetailsPanelProps {
 const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, records, language, onClose }) => {
   if (!record && !continent) return null;
   const text = uiText[language];
+  const isBreakfastPreparing = !!record && !record.imageUrl && !getRecordRecipe(record, language);
 
   // Calculate continent stats if needed
   const continentStats = React.useMemo(() => {
@@ -101,8 +102,13 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, records,
                         referrerPolicy="no-referrer"
                       />
                     ) : (
-                      <div className="w-full h-full bg-gray-50 flex items-center justify-center">
+                      <div className="w-full h-full bg-gray-50 flex flex-col items-center justify-center gap-4 text-center px-8">
                         <Coffee className="w-12 h-12 text-gray-200" />
+                        {isBreakfastPreparing ? (
+                          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-gray-400">
+                            {text.preparingBreakfast}
+                          </p>
+                        ) : null}
                       </div>
                     )}
                     <div className="absolute bottom-4 right-4 font-mono text-[9px] text-white bg-black/40 px-2 py-1 backdrop-blur-sm uppercase tracking-widest">
@@ -119,7 +125,7 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, records,
                       </h3>
                     </div>
                     <div className="font-mono text-sm text-gray-600 leading-relaxed whitespace-pre-wrap border-l border-black/5 pl-6">
-                      {getRecordRecipe(record, language) || text.recipePending}
+                      {getRecordRecipe(record, language) || text.preparingBreakfast}
                     </div>
                   </section>
                 </>

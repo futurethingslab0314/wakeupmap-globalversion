@@ -24,14 +24,10 @@ export interface NotionRecord {
 export interface WakeUpImageJob {
   pageId: string;
   city: string;
+  cityZh?: string;
   country: string;
+  countryZh?: string;
   recordedAtIso: string;
-  recipe: {
-    title: string;
-    recipe: string;
-    highlightIngredients: string[];
-    imagePrompt?: string;
-  };
 }
 
 export interface WakeUpNowResponse {

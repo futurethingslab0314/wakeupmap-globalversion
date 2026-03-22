@@ -3,19 +3,74 @@ import { createHash, createHmac } from "node:crypto";
 type WakeUpImageBody = {
   pageId?: string;
   city?: string;
+  cityZh?: string;
   country?: string;
+  countryZh?: string;
   recordedAtIso?: string;
-  recipe?: {
-    title?: string;
-    recipe?: string;
-    highlightIngredients?: string[];
-    imagePrompt?: string;
-  };
 };
 
 type NotionPropertyDefinition = {
   type?: string;
 };
+
+type StructuredResponseFormat = {
+  type: "json_schema";
+  name: string;
+  schema: Record<string, unknown>;
+  strict?: boolean;
+};
+
+type ResponsesApiPayload = {
+  output_text?: string;
+  output?: Array<{
+    content?: Array<
+      | { type?: "output_text"; text?: string }
+      | { type?: "refusal"; refusal?: string }
+    >;
+  }>;
+};
+
+type RecipeResult = {
+  title: string;
+  titleZh: string;
+  recipe: string;
+  recipeZh: string;
+  highlightIngredients: string[];
+  imagePrompt: string;
+};
+
+const localBreakfastSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    name: { type: "string" },
+    nameZh: { type: "string" },
+    description: { type: "string" },
+    descriptionZh: { type: "string" },
+    highlightIngredients: {
+      type: "array",
+      items: { type: "string" },
+    },
+  },
+  required: ["name", "nameZh", "description", "descriptionZh", "highlightIngredients"],
+} as const;
+
+const breakfastRecipeSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    title: { type: "string" },
+    titleZh: { type: "string" },
+    recipe: { type: "string" },
+    recipeZh: { type: "string" },
+    highlightIngredients: {
+      type: "array",
+      items: { type: "string" },
+    },
+    imagePrompt: { type: "string" },
+  },
+  required: ["title", "titleZh", "recipe", "recipeZh", "highlightIngredients", "imagePrompt"],
+} as const;
 
 function normalizeKey(value: string): string {
   return value.trim().toLowerCase().replace(/[\s_-]+/g, "");
@@ -51,6 +106,132 @@ function getOpenAIApiKey(): string {
     throw new Error("Missing OPENAI_API_KEY");
   }
   return apiKey;
+}
+
+function extractJsonCandidate(value: string): string {
+  const trimmed = value.trim();
+  const fencedMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return fencedMatch ? fencedMatch[1].trim() : trimmed;
+}
+
+function parseModelJson<T>(value: string, label: string): T {
+  const candidate = extractJsonCandidate(value);
+
+  if (!candidate) {
+    throw new Error(`${label} returned empty JSON`);
+  }
+
+  try {
+    return JSON.parse(candidate) as T;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown JSON parse error";
+    throw new Error(`${label} returned invalid JSON: ${message}`);
+  }
+}
+
+async function callOpenAIText(prompt: string, responseFormat?: StructuredResponseFormat): Promise<string> {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getOpenAIApiKey()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4.1-mini",
+      input: prompt,
+      ...(responseFormat
+        ? {
+            text: {
+              format: responseFormat,
+            },
+          }
+        : {}),
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI text request failed: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as ResponsesApiPayload;
+
+  if (data.output_text?.trim()) {
+    return data.output_text;
+  }
+
+  for (const item of data.output ?? []) {
+    for (const content of item.content ?? []) {
+      if (content.type === "output_text" && content.text?.trim()) {
+        return content.text;
+      }
+
+      if (content.type === "refusal" && content.refusal?.trim()) {
+        throw new Error(`OpenAI text request refused: ${content.refusal}`);
+      }
+    }
+  }
+
+  return "";
+}
+
+async function generateBreakfastConcept(city: { city: string; cityZh: string; country: string; countryZh: string }) {
+  return parseModelJson<{
+    name: string;
+    nameZh: string;
+    description: string;
+    descriptionZh: string;
+    highlightIngredients: string[];
+  }>(
+    await callOpenAIText(
+      [
+        "Recommend one iconic local breakfast and return it as JSON.",
+        `City: ${city.city}, ${city.country}`,
+        `City (Traditional Chinese): ${city.cityZh}, ${city.countryZh}`,
+        "Return JSON with name, nameZh, description, descriptionZh, highlightIngredients.",
+        "highlightIngredients must be an array of short canonical ingredient names.",
+      ].join("\n"),
+      {
+        type: "json_schema",
+        name: "local_breakfast",
+        schema: localBreakfastSchema,
+        strict: true,
+      },
+    ),
+    "Breakfast generator",
+  );
+}
+
+async function generateRecipe(
+  city: { city: string; cityZh: string; country: string; countryZh: string },
+  breakfastConcept: Awaited<ReturnType<typeof generateBreakfastConcept>>,
+) {
+  return parseModelJson<RecipeResult>(
+    await callOpenAIText(
+      [
+        "Create a practical bilingual single-serving recipe as JSON.",
+        `City: ${city.city}, ${city.country}`,
+        `City (Traditional Chinese): ${city.cityZh}, ${city.countryZh}`,
+        `Breakfast concept: ${breakfastConcept.name}`,
+        `Breakfast concept (Traditional Chinese): ${breakfastConcept.nameZh}`,
+        `Description: ${breakfastConcept.description}`,
+        `Description (Traditional Chinese): ${breakfastConcept.descriptionZh}`,
+        `Highlight ingredients: ${breakfastConcept.highlightIngredients.join(", ")}`,
+        "Generate a practical single-serving breakfast recipe inspired by this city and country.",
+        "The recipe must include ingredients with quantities, steps, and total time.",
+        "Return bilingual content that stays consistent with the same ingredients in English and Traditional Chinese.",
+        "Also return an image prompt that matches exactly the same ingredients and plating style.",
+        "Return JSON with title, titleZh, recipe, recipeZh, highlightIngredients, imagePrompt.",
+      ].join("\n"),
+      {
+        type: "json_schema",
+        name: "breakfast_recipe",
+        schema: breakfastRecipeSchema,
+        strict: true,
+      },
+    ),
+    "Recipe generator",
+  );
 }
 
 async function callOpenAIImage(prompt: string): Promise<Uint8Array> {
@@ -220,7 +401,10 @@ async function uploadToR2(cityName: string, recordedAtIso: string, imageBinary: 
   };
 }
 
-async function updateNotionImageProperties(pageId: string, imageUrl: string, imageStorageKey: string) {
+async function updateNotionBreakfastProperties(
+  pageId: string,
+  payload: { recipe: string; recipeZh: string; imageUrl: string; imageStorageKey: string },
+) {
   const notionApiKey = process.env.NOTION_API_KEY;
   if (!notionApiKey) {
     throw new Error("Missing NOTION_API_KEY");
@@ -243,14 +427,28 @@ async function updateNotionImageProperties(pageId: string, imageUrl: string, ima
   const properties = page.properties ?? {};
   const patchProperties: Record<string, unknown> = {};
 
+  const recipeName = findPropertyName(properties, "rich_text", ["recipe"]);
+  if (recipeName) {
+    patchProperties[recipeName] = {
+      rich_text: [{ text: { content: payload.recipe } }],
+    };
+  }
+
+  const recipeZhName = findPropertyName(properties, "rich_text", ["recipe zh", "recipezh", "recipe_zh"]);
+  if (recipeZhName) {
+    patchProperties[recipeZhName] = {
+      rich_text: [{ text: { content: payload.recipeZh } }],
+    };
+  }
+
   const imageUrlName = findPropertyName(properties, "url", ["image url", "imageurl", "image"]);
   if (imageUrlName) {
-    patchProperties[imageUrlName] = { url: imageUrl };
+    patchProperties[imageUrlName] = { url: payload.imageUrl };
   }
 
   const imageStorageKeyName = findPropertyName(properties, "url", ["imagestoragekey", "image storage key"]);
   if (imageStorageKeyName) {
-    patchProperties[imageStorageKeyName] = { url: imageStorageKey };
+    patchProperties[imageStorageKeyName] = { url: payload.imageStorageKey };
   }
 
   const updateResponse = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
@@ -284,14 +482,36 @@ export default async function handler(
     }
 
     const body = request.body ?? {};
-    if (!body.pageId || !body.city || !body.country || !body.recordedAtIso || !body.recipe?.title || !body.recipe?.recipe) {
+    if (!body.pageId || !body.city || !body.country || !body.recordedAtIso) {
       return response.status(400).json({ error: "Missing required wake-up image payload" });
     }
 
-    const imagePrompt = buildImagePrompt(body.city, body.country, body.recipe);
+    const localizedCity = body.cityZh || body.city;
+    const localizedCountry = body.countryZh || body.country;
+    const breakfastConcept = await generateBreakfastConcept({
+      city: body.city,
+      cityZh: localizedCity,
+      country: body.country,
+      countryZh: localizedCountry,
+    });
+    const recipe = await generateRecipe(
+      {
+        city: body.city,
+        cityZh: localizedCity,
+        country: body.country,
+        countryZh: localizedCountry,
+      },
+      breakfastConcept,
+    );
+    const imagePrompt = buildImagePrompt(body.city, body.country, recipe);
     const imageBinary = await callOpenAIImage(imagePrompt);
     const uploadedImage = await uploadToR2(body.city, body.recordedAtIso, imageBinary);
-    await updateNotionImageProperties(body.pageId, uploadedImage.imageUrl, uploadedImage.imageStorageKey);
+    await updateNotionBreakfastProperties(body.pageId, {
+      recipe: recipe.recipe,
+      recipeZh: recipe.recipeZh,
+      imageUrl: uploadedImage.imageUrl,
+      imageStorageKey: uploadedImage.imageStorageKey,
+    });
 
     return response.status(200).json({ ok: true, imageUrl: uploadedImage.imageUrl });
   } catch (error) {

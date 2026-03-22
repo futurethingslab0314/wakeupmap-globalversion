@@ -907,9 +907,6 @@ export default async function handler(
     const city = await localizeLocationNames(selectedCity);
     const greeting = await generateGreeting(city);
     const story = await generateStory(city, greeting, context.userName);
-    const breakfastConcept = await generateBreakfastConcept(city);
-    const recipe = await generateRecipe(city, breakfastConcept);
-
     const createPageResponse = await fetch("https://api.notion.com/v1/pages", {
       method: "POST",
       headers: {
@@ -928,8 +925,8 @@ export default async function handler(
           greeting,
           story: story.story,
           storyZh: story.storyZh,
-          recipe: recipe.recipe,
-          recipeZh: recipe.recipeZh,
+          recipe: "",
+          recipeZh: "",
           imageUrl: "",
           imageStorageKey: "",
           latitude: city.latitude,
@@ -952,6 +949,7 @@ export default async function handler(
     return response.status(200).json({
       record: {
         id: createdPage.id,
+        userName: context.userName,
         city: city.city,
         cityZh: city.cityZh,
         city_zh: city.cityZh,
@@ -962,9 +960,9 @@ export default async function handler(
         story: story.story,
         storyZh: story.storyZh,
         story_zh: story.storyZh,
-        recipe: recipe.recipe,
-        recipeZh: recipe.recipeZh,
-        recipe_zh: recipe.recipeZh,
+        recipe: "",
+        recipeZh: "",
+        recipe_zh: "",
         imageUrl: "",
         latitude: city.latitude,
         longitude: city.longitude,
@@ -976,14 +974,10 @@ export default async function handler(
       imageJob: {
         pageId: createdPage.id,
         city: city.city,
+        cityZh: city.cityZh,
         country: city.country,
+        countryZh: city.countryZh,
         recordedAtIso: context.recordedAtIso,
-        recipe: {
-          title: recipe.title,
-          recipe: recipe.recipe,
-          highlightIngredients: recipe.highlightIngredients,
-          imagePrompt: recipe.imagePrompt,
-        },
       },
     });
   } catch (error) {

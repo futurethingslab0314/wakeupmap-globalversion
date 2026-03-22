@@ -4,7 +4,7 @@ import DetailsPanel from "./components/DetailsPanel";
 import ParticleStorm from "./components/ParticleStorm";
 import { NotionRecord, WakeUpNowResponse } from "./types";
 import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
-import { getLatestRecordForUser } from "./mapSelection";
+import { filterRecordsForUser, getLatestRecordForUser } from "./mapSelection";
 import { motion, AnimatePresence } from "motion/react";
 import { Coffee, Loader2, AlertCircle, RefreshCw, Sun, Clock, Database, X, Volume2, VolumeX } from "lucide-react";
 import { soundService } from "./services/soundService";
@@ -26,22 +26,32 @@ export default function App() {
   const [rotation, setRotation] = useState<[number, number, number]>([0, -20, 0]);
   const [language, setLanguage] = useState<UiLanguage>("en");
   const text = uiText[language];
+  const visibleRecords = React.useMemo(() => {
+    if (!isNameConfirmed) {
+      return records;
+    }
+
+    return filterRecordsForUser(records, userName);
+  }, [records, isNameConfirmed, userName]);
 
   const sortedRecords = React.useMemo(() => {
-    return [...records].sort((a, b) => {
+    return [...visibleRecords].sort((a, b) => {
       const dateA = a.recordedAtDate ? new Date(a.recordedAtDate).getTime() : 0;
       const dateB = b.recordedAtDate ? new Date(b.recordedAtDate).getTime() : 0;
       return dateB - dateA;
     });
-  }, [records]);
+  }, [visibleRecords]);
 
   useEffect(() => {
     if (!selectedRecord) return;
-    const latest = records.find((record) => record.id === selectedRecord.id);
+    const latest = visibleRecords.find((record) => record.id === selectedRecord.id);
     if (latest && latest !== selectedRecord) {
       setSelectedRecord(latest);
     }
-  }, [records, selectedRecord]);
+    if (!latest) {
+      setSelectedRecord(null);
+    }
+  }, [visibleRecords, selectedRecord]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -162,14 +172,14 @@ export default function App() {
     if (targetOffset < -12) targetOffset += 24;
 
     // Find records with offset within 0.5 hours of target
-    const matches = records.filter(r => Math.abs(r.utcOffset - targetOffset) <= 0.5);
+    const matches = visibleRecords.filter(r => Math.abs(r.utcOffset - targetOffset) <= 0.5);
     setHighlightedIds(matches.map(m => m.id));
     
     // We no longer auto-select the record to keep the details panel closed initially
     // if (matches.length > 0) {
     //   setSelectedRecord(matches[0]);
     // }
-  }, [records]);
+  }, [visibleRecords]);
 
   useEffect(() => {
     fetchData();
@@ -179,10 +189,12 @@ export default function App() {
 
   // Automatically find morning locations once records are loaded
   useEffect(() => {
-    if (records.length > 0) {
+    if (visibleRecords.length > 0) {
       findMorningLocations();
+    } else {
+      setHighlightedIds([]);
     }
-  }, [records, findMorningLocations]);
+  }, [visibleRecords, findMorningLocations]);
 
   useEffect(() => {
     soundService.setEnabled(soundEnabled);
@@ -296,7 +308,7 @@ export default function App() {
         transition={{ type: "spring", damping: 30, stiffness: 150 }}
       >
         <Map
-          records={records}
+          records={visibleRecords}
           language={language}
           rotation={rotation}
           onRotationChange={setRotation}
@@ -378,7 +390,7 @@ export default function App() {
                 {text.globalBreakfastNetwork}
               </p>
               <p className="text-[9px] font-mono text-accent-neon font-bold uppercase tracking-[0.3em]">
-                {records.length} {text.locationsDiscovered}
+                {visibleRecords.length} {text.locationsDiscovered}
               </p>
             </div>
           </div>
@@ -641,7 +653,7 @@ export default function App() {
       <DetailsPanel
         record={selectedRecord}
         continent={selectedContinent}
-        records={records}
+        records={visibleRecords}
         language={language}
         onClose={() => {
           soundService.playClick();

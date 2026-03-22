@@ -35,14 +35,10 @@ test("wake up image route validates POST and delegates to background image gener
       body: {
         pageId: "page-1",
         city: "Taipei",
+        cityZh: "台北",
         country: "Taiwan",
+        countryZh: "台灣",
         recordedAtIso: "2026-03-22T08:00:00.000Z",
-        recipe: {
-          title: "Soy Milk Set",
-          recipe: "Warm soy milk and serve with youtiao.",
-          highlightIngredients: ["soy milk", "youtiao"],
-          imagePrompt: "Top-view breakfast photo.",
-        },
       },
     },
     response,
@@ -52,14 +48,10 @@ test("wake up image route validates POST and delegates to background image gener
   assert.deepEqual(receivedBody, {
     pageId: "page-1",
     city: "Taipei",
+    cityZh: "台北",
     country: "Taiwan",
+    countryZh: "台灣",
     recordedAtIso: "2026-03-22T08:00:00.000Z",
-    recipe: {
-      title: "Soy Milk Set",
-      recipe: "Warm soy milk and serve with youtiao.",
-      highlightIngredients: ["soy milk", "youtiao"],
-      imagePrompt: "Top-view breakfast photo.",
-    },
   });
   assert.deepEqual(jsonPayload, { ok: true });
 });

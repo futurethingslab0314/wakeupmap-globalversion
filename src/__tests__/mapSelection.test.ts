@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { getLatestRecord, getLatestRecordForUser } from "../mapSelection";
+import { filterRecordsForUser, getLatestRecord, getLatestRecordForUser } from "../mapSelection";
 import type { NotionRecord } from "../types";
 
 function createRecord(id: string, recordedAtDate?: string, userName?: string): NotionRecord {
@@ -55,4 +55,17 @@ test("getLatestRecordForUser returns the newest record for a matching username",
   );
 
   assert.equal(latest?.id, "latest");
+});
+
+test("filterRecordsForUser returns only records for the confirmed username", () => {
+  const filtered = filterRecordsForUser(
+    [
+      createRecord("one", "2026-03-22T08:00:00.000Z", "YT"),
+      createRecord("two", "2026-03-22T09:00:00.000Z", "ANNIE"),
+      createRecord("three", "2026-03-22T10:00:00.000Z", "yt"),
+    ],
+    "YT",
+  );
+
+  assert.deepEqual(filtered.map((record) => record.id), ["one", "three"]);
 });
