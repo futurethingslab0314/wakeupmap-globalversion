@@ -6,6 +6,36 @@ interface CreateOpenAIClientOptions {
   imageModel?: string;
 }
 
+type ResponsesApiPayload = {
+  output_text?: string;
+  output?: Array<{
+    content?: Array<
+      | { type?: "output_text"; text?: string }
+      | { type?: "refusal"; refusal?: string }
+    >;
+  }>;
+};
+
+function extractTextOutput(data: ResponsesApiPayload): string {
+  if (data.output_text?.trim()) {
+    return data.output_text;
+  }
+
+  for (const item of data.output ?? []) {
+    for (const content of item.content ?? []) {
+      if (content.type === "output_text" && content.text?.trim()) {
+        return content.text;
+      }
+
+      if (content.type === "refusal" && content.refusal?.trim()) {
+        throw new Error(`OpenAI text request refused: ${content.refusal}`);
+      }
+    }
+  }
+
+  return "";
+}
+
 export function createOpenAIClient(options: CreateOpenAIClientOptions): OpenAIClient {
   const textModel = options.textModel ?? "gpt-4.1-mini";
   const imageModel = options.imageModel ?? "gpt-image-1";
@@ -38,11 +68,8 @@ export function createOpenAIClient(options: CreateOpenAIClientOptions): OpenAICl
         throw new Error(`OpenAI text request failed with status ${response.status}`);
       }
 
-      const data = (await response.json()) as {
-        output_text?: string;
-      };
-
-      return data.output_text ?? "";
+      const data = (await response.json()) as ResponsesApiPayload;
+      return extractTextOutput(data);
     },
     async generateImage(request: OpenAIImageRequest): Promise<Uint8Array> {
       const response = await fetch("https://api.openai.com/v1/images/generations", {
