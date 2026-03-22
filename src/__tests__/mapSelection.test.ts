@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { getLatestRecord } from "../mapSelection";
+import { getLatestRecord, getLatestRecordForUser } from "../mapSelection";
 import type { NotionRecord } from "../types";
 
-function createRecord(id: string, recordedAtDate?: string): NotionRecord {
+function createRecord(id: string, recordedAtDate?: string, userName?: string): NotionRecord {
   return {
     id,
+    ...(userName ? { userName } : {}),
     city: id,
     city_zh: id,
     country: "Country",
@@ -41,4 +42,17 @@ test("getLatestRecord falls back safely when dates are missing", () => {
   ]);
 
   assert.equal(latest?.id, "dated");
+});
+
+test("getLatestRecordForUser returns the newest record for a matching username", () => {
+  const latest = getLatestRecordForUser(
+    [
+      createRecord("older", "2026-03-22T08:00:00.000Z", "YT"),
+      createRecord("other", "2026-03-22T10:00:00.000Z", "ANNIE"),
+      createRecord("latest", "2026-03-22T09:30:00.000Z", "yt"),
+    ],
+    "YT",
+  );
+
+  assert.equal(latest?.id, "latest");
 });

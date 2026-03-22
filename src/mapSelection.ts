@@ -11,3 +11,13 @@ export function getLatestRecord(records: NotionRecord[]): NotionRecord | null {
     return rightTime - leftTime;
   })[0] ?? null;
 }
+
+export function getLatestRecordForUser(records: NotionRecord[], userName: string): NotionRecord | null {
+  const normalizedUserName = userName.trim().toLowerCase();
+  if (!normalizedUserName) {
+    return null;
+  }
+
+  const matchedRecords = records.filter((record) => record.userName?.trim().toLowerCase() === normalizedUserName);
+  return getLatestRecord(matchedRecords);
+}

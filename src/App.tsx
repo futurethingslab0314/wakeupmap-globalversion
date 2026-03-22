@@ -4,6 +4,7 @@ import DetailsPanel from "./components/DetailsPanel";
 import ParticleStorm from "./components/ParticleStorm";
 import { NotionRecord, WakeUpNowResponse } from "./types";
 import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
+import { getLatestRecordForUser } from "./mapSelection";
 import { motion, AnimatePresence } from "motion/react";
 import { Coffee, Loader2, AlertCircle, RefreshCw, Sun, Clock, Database, X, Volume2, VolumeX } from "lucide-react";
 import { soundService } from "./services/soundService";
@@ -353,7 +354,13 @@ export default function App() {
                 onChange={(e) => setUserName(e.target.value.toUpperCase())}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && userName.trim()) {
+                    const latestRecordForUser = getLatestRecordForUser(records, userName);
                     setIsNameConfirmed(true);
+                    if (latestRecordForUser) {
+                      setSelectedRecord(latestRecordForUser);
+                      setSelectedContinent(null);
+                      setHighlightedIds([latestRecordForUser.id]);
+                    }
                     soundService.playSuccess();
                   }
                 }}

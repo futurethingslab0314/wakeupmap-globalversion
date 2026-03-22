@@ -140,6 +140,7 @@ function normalizePage(page: { id?: string; properties?: Record<string, unknown>
 
   return {
     id: page.id ?? userName ?? "",
+    userName,
     city,
     city_zh: cityZh,
     country,

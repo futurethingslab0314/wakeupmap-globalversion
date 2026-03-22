@@ -1,5 +1,6 @@
 export interface NotionRecord {
   id: string;
+  userName?: string;
   city: string;
   cityZh?: string;
   city_zh: string;

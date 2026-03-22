@@ -1,5 +1,6 @@
 export interface LocationRecord {
   id: string;
+  userName?: string;
   city: string;
   city_zh: string;
   country: string;
@@ -18,6 +19,7 @@ export interface LocationRecord {
 export const locations: LocationRecord[] = [
   {
     id: "1",
+    userName: "DEMO",
     city: "Taipei",
     city_zh: "台北",
     country: "Taiwan",
@@ -34,6 +36,7 @@ export const locations: LocationRecord[] = [
   },
   {
     id: "2",
+    userName: "DEMO",
     city: "Tokyo",
     city_zh: "東京",
     country: "Japan",
@@ -50,6 +53,7 @@ export const locations: LocationRecord[] = [
   },
   {
     id: "3",
+    userName: "DEMO",
     city: "Paris",
     city_zh: "巴黎",
     country: "France",
@@ -66,6 +70,7 @@ export const locations: LocationRecord[] = [
   },
   {
     id: "4",
+    userName: "DEMO",
     city: "New York",
     city_zh: "紐約",
     country: "USA",
@@ -82,6 +87,7 @@ export const locations: LocationRecord[] = [
   },
   {
     id: "5",
+    userName: "DEMO",
     city: "London",
     city_zh: "倫敦",
     country: "UK",
@@ -98,6 +104,7 @@ export const locations: LocationRecord[] = [
   },
   {
     id: "6",
+    userName: "DEMO",
     city: "Sydney",
     city_zh: "雪梨",
     country: "Australia",
@@ -114,6 +121,7 @@ export const locations: LocationRecord[] = [
   },
   {
     id: "7",
+    userName: "DEMO",
     city: "Bangkok",
     city_zh: "曼谷",
     country: "Thailand",
@@ -130,6 +138,7 @@ export const locations: LocationRecord[] = [
   },
   {
     id: "8",
+    userName: "DEMO",
     city: "Istanbul",
     city_zh: "伊斯坦堡",
     country: "Turkey",
@@ -146,6 +155,7 @@ export const locations: LocationRecord[] = [
   },
   {
     id: "9",
+    userName: "DEMO",
     city: "Mexico City",
     city_zh: "墨西哥城",
     country: "Mexico",
@@ -162,6 +172,7 @@ export const locations: LocationRecord[] = [
   },
   {
     id: "10",
+    userName: "DEMO",
     city: "Cairo",
     city_zh: "開羅",
     country: "Egypt",
