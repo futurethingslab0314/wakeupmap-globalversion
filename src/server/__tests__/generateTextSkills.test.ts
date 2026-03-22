@@ -39,8 +39,10 @@ test("generateGreeting builds a local-language request from languageCode and gre
 
   assert.equal(result, "早安！");
   assert.equal(requests.length, 1);
-  assert.match(requests[0].userPrompt, /zh-TW/);
-  assert.match(requests[0].userPrompt, /Warm Taiwanese morning greeting/);
+  assert.match(requests[0].userPrompt, /Taipei, Taiwan/);
+  assert.match(requests[0].userPrompt, /most widely used local language/i);
+  assert.match(requests[0].userPrompt, /3 to 20/i);
+  assert.match(requests[0].userPrompt, /Return only the greeting/i);
 });
 
 test("generateStory builds bilingual output constraints including the required opening line", async () => {
@@ -64,8 +66,10 @@ test("generateStory builds bilingual output constraints including the required o
 
   assert.equal(result.story, "You wake up in Taipei to the scent of soy milk.");
   assert.equal(result.storyZh, "你在台北的豆漿香氣中醒來。");
-  assert.match(requests[0].userPrompt, /The first sentence must begin with "You wake up in/);
-  assert.match(requests[0].userPrompt, /Return JSON/);
+  assert.match(requests[0].userPrompt, /Today you wake up in Taipei, Taiwan\./);
+  assert.match(requests[0].userPrompt, /今天的你甦醒在台灣的台北。/);
+  assert.match(requests[0].userPrompt, /lesser-known historical detail/i);
+  assert.match(requests[0].userPrompt, /under 150/i);
   assert.match(requests[0].userPrompt, /YT/);
 });
 

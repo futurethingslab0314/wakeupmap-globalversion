@@ -1,50 +1,14 @@
-const cityCandidates = [
-  {
-    id: "taipei",
-    city: "Taipei",
-    cityZh: "台北",
-    country: "Taiwan",
-    countryZh: "台灣",
-    latitude: 25.033,
-    longitude: 121.5654,
-    utcOffset: 8,
-    population: 2493000,
-    greetingHint: "Warm Taiwanese morning greeting",
-    languageCode: "zh-TW",
-    breakfastName: "Soy Milk and Youtiao",
-    breakfastNameZh: "豆漿油條",
-  },
-  {
-    id: "tokyo",
-    city: "Tokyo",
-    cityZh: "東京",
-    country: "Japan",
-    countryZh: "日本",
-    latitude: 35.6895,
-    longitude: 139.6917,
-    utcOffset: 9,
-    population: 13960000,
-    greetingHint: "Polite Japanese morning greeting",
-    languageCode: "ja-JP",
-    breakfastName: "Grilled Fish Breakfast",
-    breakfastNameZh: "日式烤魚早餐",
-  },
-  {
-    id: "bangkok",
-    city: "Bangkok",
-    cityZh: "曼谷",
-    country: "Thailand",
-    countryZh: "泰國",
-    latitude: 13.7563,
-    longitude: 100.5018,
-    utcOffset: 7,
-    population: 10539000,
-    greetingHint: "Friendly Thai morning greeting",
-    languageCode: "th-TH",
-    breakfastName: "Jok Rice Porridge",
-    breakfastNameZh: "泰式粥品 Jok",
-  },
-];
+import { generateBreakfastImage } from "../src/server/skills/generateBreakfastImage";
+import { generateGreeting } from "../src/server/skills/generateGreeting";
+import { generateLocalBreakfast } from "../src/server/skills/generateLocalBreakfast";
+import { generateRecipe } from "../src/server/skills/generateRecipe";
+import { selectCity } from "../src/server/skills/selectCity";
+import { generateStory } from "../src/server/skills/generateStory";
+import { uploadImageToR2 } from "../src/server/skills/uploadImageToR2";
+import { createOpenAIClient } from "../src/server/services/openai";
+import { createR2Client } from "../src/server/services/r2";
+import { loadWorldCities } from "../src/server/services/worldCities";
+import type { NormalizedNotionRecord, RecipeResult } from "../src/server/types";
 
 type NotionPropertyDefinition = {
   id?: string;
@@ -56,12 +20,25 @@ type NotionDatabaseResponse = {
   properties?: Record<string, NotionPropertyDefinition>;
 };
 
-function getMinuteDiffToEight(nowIso: string, utcOffset: number) {
-  const now = new Date(nowIso);
-  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const localMinutes = utcMinutes + utcOffset * 60;
-  const normalized = ((localMinutes % 1440) + 1440) % 1440;
-  return Math.abs(normalized - 480);
+type NotionQueryResponse = {
+  results?: Array<{ properties?: Record<string, unknown> }>;
+};
+
+interface WakeUpNowBody {
+  language?: "en" | "zh";
+  userName?: string;
+  nowUtcIso?: string;
+  clientTimeZone?: string;
+  clientIsoTime?: string;
+}
+
+interface CapturedWakeUpContext {
+  userName: string;
+  timezone: string;
+  recordedAtDate: string;
+  recordedAt: string;
+  recordedAtIso: string;
+  nowUtcIso: string;
 }
 
 function normalizeKey(value: string): string {
@@ -84,50 +61,197 @@ function findPropertyName(
   return undefined;
 }
 
-async function callOpenAIText(prompt: string) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return null;
+function getPlainText(value: unknown): string {
+  if (!Array.isArray(value)) {
+    return "";
   }
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  return value
+    .map((item) => {
+      if (typeof item === "object" && item !== null && "plain_text" in item) {
+        const plainText = (item as { plain_text?: unknown }).plain_text;
+        return typeof plainText === "string" ? plainText : "";
+      }
+
+      return "";
+    })
+    .join("")
+    .trim();
+}
+
+function getTitleProperty(properties: Record<string, unknown>, key: string): string {
+  const property = properties[key];
+  if (typeof property !== "object" || property === null || !("title" in property)) {
+    return "";
+  }
+
+  return getPlainText((property as { title?: unknown }).title);
+}
+
+function getRichTextProperty(properties: Record<string, unknown>, key: string): string {
+  const property = properties[key];
+  if (typeof property !== "object" || property === null || !("rich_text" in property)) {
+    return "";
+  }
+
+  return getPlainText((property as { rich_text?: unknown }).rich_text);
+}
+
+function isValidTimeZone(timeZone: string | undefined): timeZone is string {
+  if (!timeZone) {
+    return false;
+  }
+
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function parseClientDate(value: string | undefined): Date | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function formatDatePart(date: Date, timeZone: string): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  return formatter.format(date);
+}
+
+function formatTimePart(date: Date, timeZone: string): string {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+
+  return formatter.format(date);
+}
+
+function captureWakeUpContext(body: WakeUpNowBody): CapturedWakeUpContext {
+  const userName = body.userName?.trim();
+  if (!userName) {
+    throw new Error("userName must not be blank");
+  }
+
+  const timezone = isValidTimeZone(body.clientTimeZone) ? body.clientTimeZone : "UTC";
+  const recordedAtDateTime = parseClientDate(body.clientIsoTime) ?? new Date();
+  const nowUtcIso = body.nowUtcIso ?? recordedAtDateTime.toISOString();
+
+  return {
+    userName,
+    timezone,
+    recordedAtDate: formatDatePart(recordedAtDateTime, timezone),
+    recordedAt: formatTimePart(recordedAtDateTime, timezone),
+    recordedAtIso: recordedAtDateTime.toISOString(),
+    nowUtcIso,
+  };
+}
+
+async function getRecentCityNames(input: {
+  apiKey: string;
+  databaseId: string;
+}): Promise<string[]> {
+  const response = await fetch(`https://api.notion.com/v1/databases/${input.databaseId}/query`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${input.apiKey}`,
+      "Notion-Version": "2022-06-28",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-4.1-mini",
-      input: prompt,
+      page_size: 7,
+      sorts: [{ timestamp: "created_time", direction: "descending" }],
     }),
   });
 
   if (!response.ok) {
-    return null;
+    return [];
   }
 
-  const data = (await response.json()) as { output_text?: string };
-  return data.output_text ?? null;
+  const payload = (await response.json()) as NotionQueryResponse;
+
+  return (payload.results ?? [])
+    .map((page) => {
+      const properties = page.properties ?? {};
+      return (
+        getRichTextProperty(properties, "city") ||
+        getRichTextProperty(properties, "City") ||
+        getTitleProperty(properties, "city") ||
+        getTitleProperty(properties, "City")
+      );
+    })
+    .filter(Boolean);
+}
+
+function buildRecentRecords(cityNames: string[]): NormalizedNotionRecord[] {
+  return cityNames.map((city) => ({
+    id: city,
+    city,
+    cityZh: city,
+    country: "",
+    countryZh: "",
+    greeting: "",
+    story: "",
+    storyZh: "",
+    recipe: "",
+    imageUrl: "",
+    latitude: 0,
+    longitude: 0,
+    utcOffset: 0,
+  }));
+}
+
+function buildFallbackRecipe(cityName: string, cityNameZh: string): RecipeResult {
+  return {
+    title: `${cityName} Morning Plate`,
+    titleZh: `${cityNameZh}晨間早餐`,
+    recipe:
+      "Ingredients: 1 warm drink, 1 main starch, and 1 fresh garnish. Steps: Prepare the drink, plate the starch, and finish with the garnish. Total time: 15 minutes.",
+    recipeZh:
+      "食材：1 份熱飲、1 份主食、1 份新鮮配料。步驟：準備熱飲，擺好主食，最後加入配料。總時長：15 分鐘。",
+    highlightIngredients: ["warm drink", "main starch", "fresh garnish"],
+    imagePrompt: `Top-down photo of a single-person ${cityName} breakfast with a warm drink, a main starch, and a fresh garnish on a simple tabletop.`,
+  };
 }
 
 function buildNotionProperties(
   schema: Record<string, NotionPropertyDefinition>,
   record: {
-  userName: string;
-  city: string;
-  cityZh: string;
-  country: string;
-  countryZh: string;
-  greeting: string;
-  story: string;
-  storyZh: string;
-  recipe: string;
-  imageUrl: string;
-  latitude: number;
-  longitude: number;
-  utcOffset: number;
-  recordedAtDate: string;
-}) {
+    userName: string;
+    city: string;
+    cityZh: string;
+    country: string;
+    countryZh: string;
+    greeting: string;
+    story: string;
+    storyZh: string;
+    recipe: string;
+    recipeZh: string;
+    imageUrl: string;
+    imageStorageKey: string;
+    latitude: number;
+    longitude: number;
+    utcOffset: number;
+    recordedAtDate: string;
+    recordedAt: string;
+    timezone: string;
+  },
+) {
   const properties: Record<string, unknown> = {};
 
   const titleName = findPropertyName(schema, "title", ["userName", "user name", "name", "title"]);
@@ -146,8 +270,9 @@ function buildNotionProperties(
     [["story"], record.story],
     [["story zh", "storyzh", "story_zh"], record.storyZh],
     [["recipe"], record.recipe],
-    [["recipe zh", "recipezh", "recipe_zh"], record.recipe],
-    [["local time", "localtime"], new Date(record.recordedAtDate).toLocaleString("en-US", { timeZone: "UTC" })],
+    [["recipe zh", "recipezh", "recipe_zh"], record.recipeZh],
+    [["timezone"], record.timezone],
+    [["recordedat", "recorded at", "local time", "localtime"], record.recordedAt],
   ];
 
   for (const [aliases, value] of richTextMappings) {
@@ -181,16 +306,12 @@ function buildNotionProperties(
 
   const imageStorageKeyName = findPropertyName(schema, "url", ["imagestoragekey", "image storage key"]);
   if (imageStorageKeyName) {
-    properties[imageStorageKeyName] = { url: record.imageUrl };
+    properties[imageStorageKeyName] = { url: record.imageStorageKey };
   }
 
-  const recordedAtNames = [
-    findPropertyName(schema, "date", ["recordedatdate", "recorded at date"]),
-    findPropertyName(schema, "date", ["recordedat", "recorded at", "date"]),
-  ].filter((value): value is string => Boolean(value));
-
-  for (const recordedAtName of recordedAtNames) {
-    properties[recordedAtName] = {
+  const recordedAtDateName = findPropertyName(schema, "date", ["recordedatdate", "recorded at date", "date"]);
+  if (recordedAtDateName) {
+    properties[recordedAtDateName] = {
       date: {
         start: record.recordedAtDate,
       },
@@ -200,8 +321,37 @@ function buildNotionProperties(
   return properties;
 }
 
+function createOpenAiFromEnv() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing OPENAI_API_KEY");
+  }
+
+  return createOpenAIClient({ apiKey });
+}
+
+function createR2FromEnv() {
+  const endpoint = process.env.CLOUDFLARE_R2_ENDPOINT;
+  const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
+  const bucket = process.env.CLOUDFLARE_R2_BUCKET;
+  const publicUrlBase = process.env.CLOUDFLARE_R2_PUBLIC_URL;
+
+  if (!endpoint || !accessKeyId || !secretAccessKey || !bucket || !publicUrlBase) {
+    throw new Error("Missing Cloudflare R2 configuration");
+  }
+
+  return createR2Client({
+    endpoint,
+    accessKeyId,
+    secretAccessKey,
+    bucket,
+    publicUrlBase,
+  });
+}
+
 export default async function handler(
-  request: { method?: string; body?: { language?: "en" | "zh"; userName?: string } },
+  request: { method?: string; body?: WakeUpNowBody },
   response: {
     status(code: number): { json(payload: unknown): unknown };
     json(payload: unknown): unknown;
@@ -214,17 +364,19 @@ export default async function handler(
       return response.status(405).json({ error: "Method Not Allowed" });
     }
 
-    const apiKey = process.env.NOTION_API_KEY;
+    const notionApiKey = process.env.NOTION_API_KEY;
     const databaseId = process.env.NOTION_DATABASE_ID;
 
-    if (!apiKey || !databaseId) {
+    if (!notionApiKey || !databaseId) {
       return response.status(500).json({ error: "Missing NOTION_API_KEY or NOTION_DATABASE_ID" });
     }
+
+    const context = captureWakeUpContext(request.body ?? {});
 
     const databaseResponse = await fetch(`https://api.notion.com/v1/databases/${databaseId}`, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${notionApiKey}`,
         "Notion-Version": "2022-06-28",
       },
     });
@@ -236,62 +388,74 @@ export default async function handler(
 
     const database = (await databaseResponse.json()) as NotionDatabaseResponse;
     const schema = database.properties ?? {};
+    const recentCityNames = await getRecentCityNames({ apiKey: notionApiKey, databaseId });
+    const selected = selectCity({
+      nowUtcIso: context.nowUtcIso,
+      cities: loadWorldCities(context.nowUtcIso),
+      recentRecords: buildRecentRecords(recentCityNames),
+    });
+    const city = selected.city;
 
-    const nowIso = new Date().toISOString();
-    const city = [...cityCandidates].sort(
-      (left, right) =>
-        getMinuteDiffToEight(nowIso, left.utcOffset) - getMinuteDiffToEight(nowIso, right.utcOffset) ||
-        right.population - left.population,
-    )[0];
-
-    const greeting =
-      (await callOpenAIText(
-        `Write a brief local morning greeting for ${city.city} in ${city.languageCode}. Return only the greeting.`,
-      )) ?? `Good morning from ${city.city}!`;
-
-    const story =
-      (await callOpenAIText(
-        `Write one short English sentence that begins with "You wake up in ${city.city}" and mentions a local breakfast.`,
-      )) ?? `You wake up in ${city.city} to the aroma of ${city.breakfastName}.`;
-
-    const storyZh =
-      (await callOpenAIText(
-        `Translate this into Traditional Chinese naturally: ${story}`,
-      )) ?? `你在 ${city.cityZh} 的清晨裡，聞到 ${city.breakfastNameZh} 的香氣而醒來。`;
-
+    const openai = createOpenAiFromEnv();
+    const greeting = await generateGreeting({ openai, city });
+    const story = await generateStory({
+      openai,
+      city,
+      greeting,
+      userName: context.userName,
+    });
+    const breakfastConcept = await generateLocalBreakfast({ openai, city });
     const recipe =
-      (await callOpenAIText(
-        `Write a compact breakfast description for ${city.breakfastName} in one sentence.`,
-      )) ?? `${city.breakfastName} inspired breakfast, prepared as a single serving morning plate.`;
-
-    const recordedAtDate = new Date().toISOString();
-    const imageUrl = `https://picsum.photos/seed/${city.id}-${recordedAtDate}/800/600`;
-    const notionUserName = request.body?.userName?.trim() || `${city.city} Wake Up`;
+      (await generateRecipe({
+        openai,
+        breakfastConcept,
+        cityName: city.city,
+        countryName: city.country,
+        cityNameZh: city.cityZh,
+        countryNameZh: city.countryZh,
+      })) ?? buildFallbackRecipe(city.city, city.cityZh);
+    const breakfastImage = await generateBreakfastImage({
+      openai,
+      cityName: city.city,
+      countryName: city.country,
+      recipe,
+    });
+    const r2 = createR2FromEnv();
+    const uploadedImage = await uploadImageToR2({
+      r2,
+      imageBinary: breakfastImage.imageBinary,
+      cityName: city.city,
+      recordedAtIso: context.recordedAtIso,
+    });
 
     const createPageResponse = await fetch("https://api.notion.com/v1/pages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${notionApiKey}`,
         "Notion-Version": "2022-06-28",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         parent: { database_id: databaseId },
         properties: buildNotionProperties(schema, {
-          userName: notionUserName,
+          userName: context.userName,
           city: city.city,
           cityZh: city.cityZh,
           country: city.country,
           countryZh: city.countryZh,
           greeting,
-          story,
-          storyZh,
-          recipe,
-          imageUrl,
+          story: story.story,
+          storyZh: story.storyZh,
+          recipe: recipe.recipe,
+          recipeZh: recipe.recipeZh ?? recipe.recipe,
+          imageUrl: uploadedImage.imageUrl,
+          imageStorageKey: uploadedImage.imageStorageKey,
           latitude: city.latitude,
           longitude: city.longitude,
           utcOffset: city.utcOffset,
-          recordedAtDate,
+          recordedAtDate: context.recordedAtDate,
+          recordedAt: context.recordedAt,
+          timezone: context.timezone,
         }),
       }),
     });
@@ -307,19 +471,26 @@ export default async function handler(
       record: {
         id: createdPage.id,
         city: city.city,
+        cityZh: city.cityZh,
         city_zh: city.cityZh,
         country: city.country,
+        countryZh: city.countryZh,
         country_zh: city.countryZh,
         greeting,
-        story,
-        story_zh: storyZh,
-        recipe,
-        imageUrl,
+        story: story.story,
+        storyZh: story.storyZh,
+        story_zh: story.storyZh,
+        recipe: recipe.recipe,
+        recipeZh: recipe.recipeZh,
+        imageUrl: uploadedImage.imageUrl,
         latitude: city.latitude,
         longitude: city.longitude,
         utcOffset: city.utcOffset,
-        recordedAtDate,
+        recordedAtDate: context.recordedAtDate,
+        recordedAt: context.recordedAt,
+        timezone: context.timezone,
       },
+      imageStorageKey: uploadedImage.imageStorageKey,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

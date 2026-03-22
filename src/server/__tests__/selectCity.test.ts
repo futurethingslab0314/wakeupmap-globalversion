@@ -71,7 +71,35 @@ test("selectCity breaks ties with higher population", () => {
   assert.equal(result.minuteDiffToEight, 30);
 });
 
-test("selectCity avoids recently used cities when another close option exists", () => {
+test("selectCity uses timezone rules when available instead of relying on static utcOffset", () => {
+  const result = selectCity({
+    nowUtcIso: "2026-07-01T12:00:00.000Z",
+    cities: [
+      createCity({
+        id: "new-york",
+        city: "New York",
+        country: "United States",
+        timezone: "America/New_York",
+        utcOffset: -5,
+        population: 8000000,
+      }),
+      createCity({
+        id: "lima",
+        city: "Lima",
+        country: "Peru",
+        timezone: "America/Lima",
+        utcOffset: -5,
+        population: 11000000,
+      }),
+    ],
+    recentRecords: [],
+  });
+
+  assert.equal(result.city.id, "new-york");
+  assert.equal(result.minuteDiffToEight, 0);
+});
+
+test("selectCity uses recent records only as a tie-breaker after time proximity", () => {
   const result = selectCity({
     nowUtcIso: "2026-03-22T00:00:00.000Z",
     cities: [
@@ -89,9 +117,9 @@ test("selectCity avoids recently used cities when another close option exists", 
     ],
   });
 
-  assert.equal(result.city.id, "hong-kong");
-  assert.equal(result.isRecentlyUsed, false);
-  assert.equal(result.minuteDiffToEight, 15);
+  assert.equal(result.city.id, "taipei");
+  assert.equal(result.isRecentlyUsed, true);
+  assert.equal(result.minuteDiffToEight, 0);
 });
 
 test("cityMapping exports a typed starter dataset", () => {

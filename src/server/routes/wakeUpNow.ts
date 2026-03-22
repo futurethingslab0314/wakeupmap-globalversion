@@ -36,8 +36,10 @@ export function createWakeUpNowHandler(dependencies: WakeUpNowHandlerDependencie
 
     const result = await dependencies.runWakeUpNow({
       language,
-      userName: body.userName,
-      nowUtcIso: body.nowUtcIso,
+      ...(body.userName ? { userName: body.userName } : {}),
+      ...(body.nowUtcIso ? { nowUtcIso: body.nowUtcIso } : {}),
+      ...(body.clientTimeZone ? { clientTimeZone: body.clientTimeZone } : {}),
+      ...(body.clientIsoTime ? { clientIsoTime: body.clientIsoTime } : {}),
     });
 
     response.status(200).json(result);

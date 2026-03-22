@@ -50,6 +50,12 @@ export default function App() {
   };
 
   const handleWakeUpNow = async () => {
+    const trimmedUserName = userName.trim();
+    if (!trimmedUserName) {
+      setError("Please enter your name before using Wake Up Now.");
+      return;
+    }
+
     setWakeUpLoading(true);
     setError(null);
 
@@ -61,7 +67,9 @@ export default function App() {
         },
         body: JSON.stringify({
           language: "en",
-          userName: userName.trim() || undefined,
+          userName: trimmedUserName,
+          clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          clientIsoTime: new Date().toISOString(),
         }),
       });
 

@@ -13,15 +13,18 @@ const breakfastConcept: BreakfastConcept = {
   highlightIngredients: ["soy milk", "youtiao", "scallion"],
 };
 
-test("generateRecipe preserves the selected breakfast concept and highlightIngredients", async () => {
+test("generateRecipe creates a practical bilingual single-serving recipe with matched image prompt", async () => {
   const requests: OpenAITextRequest[] = [];
   const openai = {
     generateText: async (request: OpenAITextRequest) => {
       requests.push(request);
       return JSON.stringify({
         title: "Taipei Soy Milk Set",
-        recipe: "Serve warm soy milk with crispy youtiao and chopped scallion.",
+        titleZh: "台北豆漿套餐",
+        recipe: "Ingredients: 240 ml soy milk, 1 youtiao, 1 tbsp chopped scallion. Steps: Warm the soy milk, slice the youtiao, and serve together. Total time: 10 minutes.",
+        recipeZh: "食材：豆漿 240 毫升、油條 1 根、蔥花 1 大匙。步驟：加熱豆漿，切好油條，一起上桌。總時長：10 分鐘。",
         highlightIngredients: ["soy milk", "youtiao", "scallion"],
+        imagePrompt: "Top-down photo of a single-person Taipei breakfast with soy milk, youtiao, and scallion on a simple table.",
       });
     },
   };
@@ -29,13 +32,24 @@ test("generateRecipe preserves the selected breakfast concept and highlightIngre
   const result = await generateRecipe({
     openai,
     breakfastConcept,
+    cityName: "Taipei",
+    countryName: "Taiwan",
+    cityNameZh: "台北",
+    countryNameZh: "台灣",
   });
 
   assert.equal(result.title, "Taipei Soy Milk Set");
-  assert.equal(result.recipe, "Serve warm soy milk with crispy youtiao and chopped scallion.");
+  assert.equal(result.titleZh, "台北豆漿套餐");
+  assert.match(result.recipe, /Ingredients:/);
+  assert.match(result.recipe, /Total time:/);
+  assert.match(result.recipeZh ?? "", /食材：/);
+  assert.match(result.recipeZh ?? "", /總時長：/);
   assert.deepEqual(result.highlightIngredients, ["soy milk", "youtiao", "scallion"]);
+  assert.match(result.imagePrompt ?? "", /Top-down photo/i);
   assert.match(requests[0].userPrompt, /Soy Milk and Youtiao/);
   assert.match(requests[0].userPrompt, /soy milk, youtiao, scallion/);
+  assert.match(requests[0].userPrompt, /single-serving/i);
+  assert.match(requests[0].userPrompt, /image prompt/i);
 });
 
 test("generateBreakfastImage produces a constrained OpenAI image prompt consistent with recipe ingredients", async () => {
@@ -50,21 +64,27 @@ test("generateBreakfastImage produces a constrained OpenAI image prompt consiste
   const result = await generateBreakfastImage({
     openai,
     cityName: "Taipei",
+    countryName: "Taiwan",
     recipe: {
       title: "Taipei Soy Milk Set",
-      recipe: "Serve warm soy milk with crispy youtiao and chopped scallion.",
+      recipe: "Ingredients: 240 ml soy milk, 1 youtiao, 1 tbsp chopped scallion. Steps: Warm the soy milk, slice the youtiao, and serve together. Total time: 10 minutes.",
+      recipeZh: "食材：豆漿 240 毫升、油條 1 根、蔥花 1 大匙。步驟：加熱豆漿，切好油條，一起上桌。總時長：10 分鐘。",
       highlightIngredients: ["soy milk", "youtiao", "scallion"],
+      imagePrompt: "Top-down photo of a single-person Taipei breakfast with soy milk, youtiao, and scallion on a simple table.",
     },
   });
 
   assert.deepEqual(result.imageBinary, new Uint8Array([1, 2, 3]));
   assert.match(result.prompt, /top view/i);
-  assert.match(result.prompt, /single-serving/i);
+  assert.match(result.prompt, /single-person/i);
   assert.match(result.prompt, /no people/i);
   assert.match(result.prompt, /no hands/i);
   assert.match(result.prompt, /no text/i);
   assert.match(result.prompt, /no logo/i);
+  assert.match(result.prompt, /realistic textures/i);
+  assert.match(result.prompt, /tabletop/i);
   assert.match(result.prompt, /soy milk/i);
   assert.match(result.prompt, /youtiao/i);
+  assert.match(result.prompt, /Taiwan/i);
   assert.equal(requests[0].prompt, result.prompt);
 });

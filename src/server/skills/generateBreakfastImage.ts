@@ -3,16 +3,31 @@ import type { OpenAIClient, OpenAIImageResult, RecipeResult } from "../types";
 interface GenerateBreakfastImageInput {
   openai: Pick<OpenAIClient, "generateImage">;
   cityName: string;
+  countryName: string;
   recipe: RecipeResult;
 }
 
 function buildPrompt(input: GenerateBreakfastImageInput): string {
+  if (input.recipe.imagePrompt?.trim()) {
+    return [
+      input.recipe.imagePrompt.trim(),
+      `Inspired by authentic ${input.cityName}, ${input.countryName} food culture.`,
+      "Fixed camera angle: top view.",
+      "Single-person breakfast portion.",
+      "Show only food, utensils, and tabletop.",
+      "Natural light, realistic textures, editorial composition.",
+      "No people, no humans, no hands, no text, no logo, no watermark.",
+    ].join(" ");
+  }
+
   return [
-    `Top view editorial food photograph of a single-serving breakfast from ${input.cityName}.`,
+    `Top view editorial food photograph of a single-person breakfast set inspired by authentic ${input.cityName}, ${input.countryName} food culture.`,
     `Dish title: ${input.recipe.title}.`,
-    `Include these ingredients clearly: ${input.recipe.highlightIngredients.join(", ")}.`,
-    "single-serving composition, plated neatly, natural morning light.",
-    "no people, no hands, no text, no logo, no watermark.",
+    `Must include these ingredients from recipe: ${input.recipe.highlightIngredients.join(", ")}.`,
+    `Match recipe plating style and portions: ${input.recipe.recipe}`,
+    "Show only food, utensils, and tabletop.",
+    "Top view, single-person composition, natural light, realistic textures, editorial composition.",
+    "No people, no humans, no hands, no text, no logo, no watermark.",
   ].join(" ");
 }
 

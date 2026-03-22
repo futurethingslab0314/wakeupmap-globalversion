@@ -4,6 +4,8 @@ export interface CityMappingRecord {
   cityZh: string;
   country: string;
   countryZh: string;
+  timezone?: string;
+  countryIsoCode?: string;
   latitude: number;
   longitude: number;
   utcOffset: number;
@@ -16,6 +18,8 @@ export interface WakeUpNowRequest {
   language: "en" | "zh";
   nowUtcIso?: string;
   userName?: string;
+  clientTimeZone?: string;
+  clientIsoTime?: string;
 }
 
 export interface WakeUpNowResult {
@@ -50,12 +54,15 @@ export interface NormalizedNotionRecord {
   storyZh: string;
   story_zh?: string;
   recipe: string;
+  recipeZh?: string;
   imageUrl: string;
   latitude: number;
   longitude: number;
   utcOffset: number;
   createdAt?: string;
   recordedAtDate?: string;
+  recordedAt?: string;
+  timezone?: string;
 }
 
 export interface OpenAITextRequest {
@@ -94,7 +101,9 @@ export interface RecipeResult {
   title: string;
   titleZh?: string;
   recipe: string;
+  recipeZh?: string;
   highlightIngredients: string[];
+  imagePrompt?: string;
 }
 
 export interface NotionQueryResult {
