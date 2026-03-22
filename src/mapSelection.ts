@@ -1,5 +1,11 @@
 import type { NotionRecord } from "./types";
 
+interface ViewState {
+  showDatabase: boolean;
+  selectedRecordId: string | null;
+  selectedContinent: string | null;
+}
+
 export function getLatestRecord(records: NotionRecord[]): NotionRecord | null {
   if (records.length === 0) {
     return null;
@@ -29,4 +35,12 @@ export function filterRecordsForUser(records: NotionRecord[], userName: string):
   }
 
   return records.filter((record) => record.userName?.trim().toLowerCase() === normalizedUserName);
+}
+
+export function isMainView(state: ViewState): boolean {
+  return !state.showDatabase && !state.selectedRecordId && !state.selectedContinent;
+}
+
+export function shouldRecenterOnMainView(previousState: ViewState, nextState: ViewState): boolean {
+  return !isMainView(previousState) && isMainView(nextState);
 }

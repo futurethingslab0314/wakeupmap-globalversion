@@ -1,10 +1,16 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Map from "./components/Map";
 import DetailsPanel from "./components/DetailsPanel";
 import ParticleStorm from "./components/ParticleStorm";
 import { NotionRecord, WakeUpNowResponse } from "./types";
 import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
-import { filterRecordsForUser, getLatestRecordForUser } from "./mapSelection";
+import {
+  filterRecordsForUser,
+  getLatestRecord,
+  getLatestRecordForUser,
+  isMainView,
+  shouldRecenterOnMainView,
+} from "./mapSelection";
 import { motion, AnimatePresence } from "motion/react";
 import { Coffee, Loader2, AlertCircle, RefreshCw, Sun, Clock, Database, X, Volume2, VolumeX } from "lucide-react";
 import { soundService } from "./services/soundService";
@@ -26,6 +32,12 @@ export default function App() {
   const [rotation, setRotation] = useState<[number, number, number]>([0, -20, 0]);
   const [language, setLanguage] = useState<UiLanguage>("en");
   const text = uiText[language];
+  const currentViewState = {
+    showDatabase,
+    selectedRecordId: selectedRecord?.id ?? null,
+    selectedContinent,
+  };
+  const previousViewStateRef = useRef(currentViewState);
   const visibleRecords = React.useMemo(() => {
     if (!isNameConfirmed) {
       return records;
@@ -52,6 +64,22 @@ export default function App() {
       setSelectedRecord(null);
     }
   }, [visibleRecords, selectedRecord]);
+
+  useEffect(() => {
+    const previousViewState = previousViewStateRef.current;
+    previousViewStateRef.current = currentViewState;
+
+    if (!shouldRecenterOnMainView(previousViewState, currentViewState)) {
+      return;
+    }
+
+    const latestRecord = getLatestRecord(visibleRecords);
+    if (!latestRecord) {
+      return;
+    }
+
+    setRotation([-latestRecord.longitude, -latestRecord.latitude, 0]);
+  }, [currentViewState, visibleRecords]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -372,6 +400,7 @@ export default function App() {
                       setSelectedRecord(latestRecordForUser);
                       setSelectedContinent(null);
                       setHighlightedIds([latestRecordForUser.id]);
+                      setRotation([-latestRecordForUser.longitude, -latestRecordForUser.latitude, 0]);
                     }
                     soundService.playSuccess();
                   }

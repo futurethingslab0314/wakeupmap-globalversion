@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { filterRecordsForUser, getLatestRecord, getLatestRecordForUser } from "../mapSelection";
+import {
+  filterRecordsForUser,
+  getLatestRecord,
+  getLatestRecordForUser,
+  isMainView,
+  shouldRecenterOnMainView,
+} from "../mapSelection";
 import type { NotionRecord } from "../types";
 
 function createRecord(id: string, recordedAtDate?: string, userName?: string): NotionRecord {
@@ -68,4 +74,43 @@ test("filterRecordsForUser returns only records for the confirmed username", () 
   );
 
   assert.deepEqual(filtered.map((record) => record.id), ["one", "three"]);
+});
+
+test("isMainView returns true only when no detail or journal panel is open", () => {
+  assert.equal(
+    isMainView({ showDatabase: false, selectedRecordId: null, selectedContinent: null }),
+    true,
+  );
+  assert.equal(
+    isMainView({ showDatabase: true, selectedRecordId: null, selectedContinent: null }),
+    false,
+  );
+  assert.equal(
+    isMainView({ showDatabase: false, selectedRecordId: "record-1", selectedContinent: null }),
+    false,
+  );
+});
+
+test("shouldRecenterOnMainView only triggers when returning to the initial view", () => {
+  assert.equal(
+    shouldRecenterOnMainView(
+      { showDatabase: true, selectedRecordId: null, selectedContinent: null },
+      { showDatabase: false, selectedRecordId: null, selectedContinent: null },
+    ),
+    true,
+  );
+  assert.equal(
+    shouldRecenterOnMainView(
+      { showDatabase: false, selectedRecordId: null, selectedContinent: null },
+      { showDatabase: false, selectedRecordId: null, selectedContinent: null },
+    ),
+    false,
+  );
+  assert.equal(
+    shouldRecenterOnMainView(
+      { showDatabase: false, selectedRecordId: "record-1", selectedContinent: null },
+      { showDatabase: false, selectedRecordId: "record-1", selectedContinent: null },
+    ),
+    false,
+  );
 });
