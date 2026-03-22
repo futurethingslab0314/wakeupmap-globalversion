@@ -1,14 +1,4 @@
-import { generateBreakfastImage } from "../src/server/skills/generateBreakfastImage.ts";
-import { generateGreeting } from "../src/server/skills/generateGreeting.ts";
-import { generateLocalBreakfast } from "../src/server/skills/generateLocalBreakfast.ts";
-import { generateRecipe } from "../src/server/skills/generateRecipe.ts";
-import { selectCity } from "../src/server/skills/selectCity.ts";
-import { generateStory } from "../src/server/skills/generateStory.ts";
-import { uploadImageToR2 } from "../src/server/skills/uploadImageToR2.ts";
-import { createOpenAIClient } from "../src/server/services/openai.ts";
-import { createR2Client } from "../src/server/services/r2.ts";
-import { loadWorldCities } from "../src/server/services/worldCities.ts";
-import type { NormalizedNotionRecord, RecipeResult } from "../src/server/types.ts";
+import { readFileSync } from "node:fs";
 
 type NotionPropertyDefinition = {
   id?: string;
@@ -24,41 +14,67 @@ type NotionQueryResponse = {
   results?: Array<{ properties?: Record<string, unknown> }>;
 };
 
-interface WakeUpNowBody {
+type RawWorldCity = {
+  city: string;
+  city_zh?: string;
+  country: string;
+  country_zh?: string;
+  country_iso_code?: string;
+  timezone: string;
+  latitude: number;
+  longitude: number;
+};
+
+type WorldCity = {
+  id: string;
+  city: string;
+  cityZh: string;
+  country: string;
+  countryZh: string;
+  timezone: string;
+  latitude: number;
+  longitude: number;
+  utcOffset: number;
+};
+
+type WakeUpNowBody = {
   language?: "en" | "zh";
   userName?: string;
   nowUtcIso?: string;
   clientTimeZone?: string;
   clientIsoTime?: string;
-}
+};
 
-interface CapturedWakeUpContext {
+type WakeUpContext = {
   userName: string;
   timezone: string;
   recordedAtDate: string;
   recordedAt: string;
   recordedAtIso: string;
   nowUtcIso: string;
-}
+};
+
+type RecipeResult = {
+  title: string;
+  titleZh: string;
+  recipe: string;
+  recipeZh: string;
+  highlightIngredients: string[];
+  imagePrompt: string;
+};
+
+let cachedWorldCities: RawWorldCity[] | undefined;
 
 function normalizeKey(value: string): string {
   return value.trim().toLowerCase().replace(/[\s_-]+/g, "");
 }
 
-function findPropertyName(
-  properties: Record<string, NotionPropertyDefinition>,
-  type: string,
-  aliases: string[],
-): string | undefined {
-  const aliasSet = new Set(aliases.map(normalizeKey));
-
-  for (const [name, definition] of Object.entries(properties)) {
-    if (definition.type === type && aliasSet.has(normalizeKey(name))) {
-      return name;
-    }
-  }
-
-  return undefined;
+function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function getPlainText(value: unknown): string {
@@ -95,6 +111,22 @@ function getRichTextProperty(properties: Record<string, unknown>, key: string): 
   }
 
   return getPlainText((property as { rich_text?: unknown }).rich_text);
+}
+
+function findPropertyName(
+  properties: Record<string, NotionPropertyDefinition>,
+  type: string,
+  aliases: string[],
+): string | undefined {
+  const aliasSet = new Set(aliases.map(normalizeKey));
+
+  for (const [name, definition] of Object.entries(properties)) {
+    if (definition.type === type && aliasSet.has(normalizeKey(name))) {
+      return name;
+    }
+  }
+
+  return undefined;
 }
 
 function isValidTimeZone(timeZone: string | undefined): timeZone is string {
@@ -142,7 +174,7 @@ function formatTimePart(date: Date, timeZone: string): string {
   return formatter.format(date);
 }
 
-function captureWakeUpContext(body: WakeUpNowBody): CapturedWakeUpContext {
+function captureWakeUpContext(body: WakeUpNowBody): WakeUpContext {
   const userName = body.userName?.trim();
   if (!userName) {
     throw new Error("userName must not be blank");
@@ -162,14 +194,90 @@ function captureWakeUpContext(body: WakeUpNowBody): CapturedWakeUpContext {
   };
 }
 
-async function getRecentCityNames(input: {
-  apiKey: string;
-  databaseId: string;
-}): Promise<string[]> {
-  const response = await fetch(`https://api.notion.com/v1/databases/${input.databaseId}/query`, {
+function parseShortOffset(value: string): number {
+  const normalized = value.replace("UTC", "GMT");
+  if (normalized === "GMT") {
+    return 0;
+  }
+
+  const match = normalized.match(/^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/);
+  if (!match) {
+    return 0;
+  }
+
+  const sign = match[1] === "-" ? -1 : 1;
+  const hours = Number(match[2]);
+  const minutes = Number(match[3] ?? "0");
+  return sign * (hours + minutes / 60);
+}
+
+function getUtcOffsetHoursAt(nowUtcIso: string, timezone: string): number {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    timeZoneName: "shortOffset",
+  });
+  const parts = formatter.formatToParts(new Date(nowUtcIso));
+  const offsetText = parts.find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+  return parseShortOffset(offsetText);
+}
+
+function getLocalMinutesInTimeZone(nowUtcIso: string, timezone: string): number {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = formatter.formatToParts(new Date(nowUtcIso));
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? "0");
+  return hour * 60 + minute;
+}
+
+function getMinuteDiffToEight(nowUtcIso: string, timezone: string): number {
+  return Math.abs(getLocalMinutesInTimeZone(nowUtcIso, timezone) - 8 * 60);
+}
+
+function isUsableCity(city: RawWorldCity): boolean {
+  const lowered = `${city.city} ${city.country}`.toLowerCase();
+  if (city.country === "Antarctica") {
+    return false;
+  }
+
+  return !/(station|research station|base|camp)$/.test(lowered);
+}
+
+function loadRawWorldCities(): RawWorldCity[] {
+  if (cachedWorldCities) {
+    return cachedWorldCities;
+  }
+
+  const fileUrl = new URL("../cities_data.json", import.meta.url);
+  const content = readFileSync(fileUrl, "utf-8");
+  const parsed = JSON.parse(content) as RawWorldCity[];
+  cachedWorldCities = parsed.filter(isUsableCity);
+  return cachedWorldCities;
+}
+
+function loadWorldCities(nowUtcIso: string): WorldCity[] {
+  return loadRawWorldCities().map((city) => ({
+    id: `${slugify(city.country)}-${slugify(city.city)}`,
+    city: city.city,
+    cityZh: city.city_zh ?? city.city,
+    country: city.country,
+    countryZh: city.country_zh ?? city.country,
+    timezone: city.timezone,
+    latitude: city.latitude,
+    longitude: city.longitude,
+    utcOffset: getUtcOffsetHoursAt(nowUtcIso, city.timezone),
+  }));
+}
+
+async function getRecentCityNames(apiKey: string, databaseId: string): Promise<string[]> {
+  const response = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${input.apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       "Notion-Version": "2022-06-28",
       "Content-Type": "application/json",
     },
@@ -198,34 +306,227 @@ async function getRecentCityNames(input: {
     .filter(Boolean);
 }
 
-function buildRecentRecords(cityNames: string[]): NormalizedNotionRecord[] {
-  return cityNames.map((city) => ({
-    id: city,
-    city,
-    cityZh: city,
-    country: "",
-    countryZh: "",
-    greeting: "",
-    story: "",
-    storyZh: "",
-    recipe: "",
-    imageUrl: "",
-    latitude: 0,
-    longitude: 0,
-    utcOffset: 0,
-  }));
+function selectCity(nowUtcIso: string, recentCityNames: string[]): WorldCity {
+  const recent = new Set(recentCityNames.map((city) => city.toLowerCase()));
+  const cities = loadWorldCities(nowUtcIso);
+
+  const ranked = cities
+    .map((city) => ({
+      city,
+      minuteDiffToEight: getMinuteDiffToEight(nowUtcIso, city.timezone),
+      isRecent: recent.has(city.city.toLowerCase()),
+    }))
+    .sort((left, right) => {
+      if (left.minuteDiffToEight !== right.minuteDiffToEight) {
+        return left.minuteDiffToEight - right.minuteDiffToEight;
+      }
+      if (left.isRecent !== right.isRecent) {
+        return left.isRecent ? 1 : -1;
+      }
+      return left.city.city.localeCompare(right.city.city);
+    });
+
+  return ranked[0].city;
 }
 
-function buildFallbackRecipe(cityName: string, cityNameZh: string): RecipeResult {
+function getOpenAIApiKey(): string {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing OPENAI_API_KEY");
+  }
+  return apiKey;
+}
+
+async function callOpenAIText(prompt: string): Promise<string> {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getOpenAIApiKey()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4.1-mini",
+      input: prompt,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI text request failed: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { output_text?: string };
+  return data.output_text ?? "";
+}
+
+async function callOpenAIImage(prompt: string): Promise<Uint8Array> {
+  const response = await fetch("https://api.openai.com/v1/images/generations", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getOpenAIApiKey()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-image-1",
+      prompt,
+      size: "1024x1024",
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI image request failed: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { data?: Array<{ b64_json?: string }> };
+  const base64 = data.data?.[0]?.b64_json;
+  if (!base64) {
+    throw new Error("OpenAI image response did not include image data");
+  }
+
+  return Uint8Array.from(Buffer.from(base64, "base64"));
+}
+
+function parseJson<T>(value: string): T {
+  return JSON.parse(value) as T;
+}
+
+async function generateGreeting(city: WorldCity): Promise<string> {
+  return callOpenAIText(
+    [
+      "You determine the everyday local language and produce one short natural morning greeting.",
+      `City: ${city.city}, ${city.country}`,
+      `City (Traditional Chinese): ${city.cityZh}, ${city.countryZh}`,
+      "Determine the most widely used local language for an everyday greeting in this city.",
+      "Return one short natural morning greeting in that language.",
+      "Limit the greeting to 3 to 20 characters including spaces.",
+      "Return only the greeting text with no explanation.",
+    ].join("\n"),
+  );
+}
+
+async function generateStory(city: WorldCity, greeting: string, userName: string) {
+  return parseJson<{ story: string; storyZh: string }>(
+    await callOpenAIText(
+      [
+        "Create a grounded bilingual wake-up vignette as JSON.",
+        `Selected city: ${city.city}, ${city.country}`,
+        `Greeting to weave in: ${greeting}`,
+        `User name: ${userName}`,
+        `The English story must begin exactly with: "Today you wake up in ${city.city}, ${city.country}."`,
+        `The Traditional Chinese story must begin exactly with: "今天的你甦醒在${city.countryZh}的${city.cityZh}。"`,
+        "Include local cultural habits, geography, and one lesser-known historical detail.",
+        "Keep the English story under 150 words.",
+        "Keep the Traditional Chinese story under 150 Chinese characters.",
+        "Avoid stereotypes and invented facts.",
+        "Return JSON with keys story and storyZh.",
+      ].join("\n"),
+    ),
+  );
+}
+
+async function generateBreakfastConcept(city: WorldCity) {
+  return parseJson<{
+    name: string;
+    nameZh: string;
+    description: string;
+    descriptionZh: string;
+    highlightIngredients: string[];
+  }>(
+    await callOpenAIText(
+      [
+        "Recommend one iconic local breakfast and return it as JSON.",
+        `City: ${city.city}, ${city.country}`,
+        `City (Traditional Chinese): ${city.cityZh}, ${city.countryZh}`,
+        "Return JSON with name, nameZh, description, descriptionZh, highlightIngredients.",
+        "highlightIngredients must be an array of short canonical ingredient names.",
+      ].join("\n"),
+    ),
+  );
+}
+
+async function generateRecipe(city: WorldCity, breakfastConcept: Awaited<ReturnType<typeof generateBreakfastConcept>>) {
+  return parseJson<RecipeResult>(
+    await callOpenAIText(
+      [
+        "Create a practical bilingual single-serving recipe as JSON.",
+        `City: ${city.city}, ${city.country}`,
+        `City (Traditional Chinese): ${city.cityZh}, ${city.countryZh}`,
+        `Breakfast concept: ${breakfastConcept.name}`,
+        `Breakfast concept (Traditional Chinese): ${breakfastConcept.nameZh}`,
+        `Description: ${breakfastConcept.description}`,
+        `Description (Traditional Chinese): ${breakfastConcept.descriptionZh}`,
+        `Highlight ingredients: ${breakfastConcept.highlightIngredients.join(", ")}`,
+        "Generate a practical single-serving breakfast recipe inspired by this city and country.",
+        "The recipe must include ingredients with quantities, steps, and total time.",
+        "Return bilingual content that stays consistent with the same ingredients in English and Traditional Chinese.",
+        "Also return an image prompt that matches exactly the same ingredients and plating style.",
+        "Return JSON with title, titleZh, recipe, recipeZh, highlightIngredients, imagePrompt.",
+      ].join("\n"),
+    ),
+  );
+}
+
+function buildImagePrompt(city: WorldCity, recipe: RecipeResult): string {
+  if (recipe.imagePrompt?.trim()) {
+    return [
+      recipe.imagePrompt.trim(),
+      `Inspired by authentic ${city.city}, ${city.country} food culture.`,
+      "Fixed camera angle: top view.",
+      "Single-person breakfast portion.",
+      "Show only food, utensils, and tabletop.",
+      "Natural light, realistic textures, editorial composition.",
+      "No people, no humans, no hands, no text, no logo, no watermark.",
+    ].join(" ");
+  }
+
+  return [
+    `Top view editorial food photograph of a single-person breakfast set inspired by authentic ${city.city}, ${city.country} food culture.`,
+    `Dish title: ${recipe.title}.`,
+    `Must include these ingredients from recipe: ${recipe.highlightIngredients.join(", ")}.`,
+    `Match recipe plating style and portions: ${recipe.recipe}`,
+    "Show only food, utensils, and tabletop.",
+    "Top view, single-person composition, natural light, realistic textures, editorial composition.",
+    "No people, no humans, no hands, no text, no logo, no watermark.",
+  ].join(" ");
+}
+
+function buildR2PublicUrl(publicUrlBase: string, key: string): string {
+  return `${publicUrlBase.replace(/\/$/, "")}/${key}`;
+}
+
+async function uploadToR2(cityName: string, recordedAtIso: string, imageBinary: Uint8Array) {
+  const endpoint = process.env.CLOUDFLARE_R2_ENDPOINT;
+  const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
+  const bucket = process.env.CLOUDFLARE_R2_BUCKET;
+  const publicUrlBase = process.env.CLOUDFLARE_R2_PUBLIC_URL;
+
+  if (!endpoint || !accessKeyId || !secretAccessKey || !bucket || !publicUrlBase) {
+    throw new Error("Missing Cloudflare R2 configuration");
+  }
+
+  const key = `wake-up-now/${slugify(cityName)}/${recordedAtIso.toLowerCase().replace(/[:.]/g, "-")}.png`;
+  const url = `${endpoint.replace(/\/$/, "")}/${bucket}/${key}`;
+  const authToken = Buffer.from(`${accessKeyId}:${secretAccessKey}`).toString("base64");
+
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Basic ${authToken}`,
+      "Content-Type": "image/png",
+    },
+    body: Buffer.from(imageBinary),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`R2 upload failed: ${response.status} ${errorText}`);
+  }
+
   return {
-    title: `${cityName} Morning Plate`,
-    titleZh: `${cityNameZh}晨間早餐`,
-    recipe:
-      "Ingredients: 1 warm drink, 1 main starch, and 1 fresh garnish. Steps: Prepare the drink, plate the starch, and finish with the garnish. Total time: 15 minutes.",
-    recipeZh:
-      "食材：1 份熱飲、1 份主食、1 份新鮮配料。步驟：準備熱飲，擺好主食，最後加入配料。總時長：15 分鐘。",
-    highlightIngredients: ["warm drink", "main starch", "fresh garnish"],
-    imagePrompt: `Top-down photo of a single-person ${cityName} breakfast with a warm drink, a main starch, and a fresh garnish on a simple tabletop.`,
+    imageStorageKey: key,
+    imageUrl: buildR2PublicUrl(publicUrlBase, key),
   };
 }
 
@@ -293,9 +594,7 @@ function buildNotionProperties(
   for (const [aliases, value] of numberMappings) {
     const propertyName = findPropertyName(schema, "number", aliases);
     if (propertyName) {
-      properties[propertyName] = {
-        number: value,
-      };
+      properties[propertyName] = { number: value };
     }
   }
 
@@ -319,35 +618,6 @@ function buildNotionProperties(
   }
 
   return properties;
-}
-
-function createOpenAiFromEnv() {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Missing OPENAI_API_KEY");
-  }
-
-  return createOpenAIClient({ apiKey });
-}
-
-function createR2FromEnv() {
-  const endpoint = process.env.CLOUDFLARE_R2_ENDPOINT;
-  const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
-  const bucket = process.env.CLOUDFLARE_R2_BUCKET;
-  const publicUrlBase = process.env.CLOUDFLARE_R2_PUBLIC_URL;
-
-  if (!endpoint || !accessKeyId || !secretAccessKey || !bucket || !publicUrlBase) {
-    throw new Error("Missing Cloudflare R2 configuration");
-  }
-
-  return createR2Client({
-    endpoint,
-    accessKeyId,
-    secretAccessKey,
-    bucket,
-    publicUrlBase,
-  });
 }
 
 export default async function handler(
@@ -388,45 +658,16 @@ export default async function handler(
 
     const database = (await databaseResponse.json()) as NotionDatabaseResponse;
     const schema = database.properties ?? {};
-    const recentCityNames = await getRecentCityNames({ apiKey: notionApiKey, databaseId });
-    const selected = selectCity({
-      nowUtcIso: context.nowUtcIso,
-      cities: loadWorldCities(context.nowUtcIso),
-      recentRecords: buildRecentRecords(recentCityNames),
-    });
-    const city = selected.city;
 
-    const openai = createOpenAiFromEnv();
-    const greeting = await generateGreeting({ openai, city });
-    const story = await generateStory({
-      openai,
-      city,
-      greeting,
-      userName: context.userName,
-    });
-    const breakfastConcept = await generateLocalBreakfast({ openai, city });
-    const recipe =
-      (await generateRecipe({
-        openai,
-        breakfastConcept,
-        cityName: city.city,
-        countryName: city.country,
-        cityNameZh: city.cityZh,
-        countryNameZh: city.countryZh,
-      })) ?? buildFallbackRecipe(city.city, city.cityZh);
-    const breakfastImage = await generateBreakfastImage({
-      openai,
-      cityName: city.city,
-      countryName: city.country,
-      recipe,
-    });
-    const r2 = createR2FromEnv();
-    const uploadedImage = await uploadImageToR2({
-      r2,
-      imageBinary: breakfastImage.imageBinary,
-      cityName: city.city,
-      recordedAtIso: context.recordedAtIso,
-    });
+    const recentCityNames = await getRecentCityNames(notionApiKey, databaseId);
+    const city = selectCity(context.nowUtcIso, recentCityNames);
+    const greeting = await generateGreeting(city);
+    const story = await generateStory(city, greeting, context.userName);
+    const breakfastConcept = await generateBreakfastConcept(city);
+    const recipe = await generateRecipe(city, breakfastConcept);
+    const imagePrompt = buildImagePrompt(city, recipe);
+    const imageBinary = await callOpenAIImage(imagePrompt);
+    const uploadedImage = await uploadToR2(city.city, context.recordedAtIso, imageBinary);
 
     const createPageResponse = await fetch("https://api.notion.com/v1/pages", {
       method: "POST",
@@ -447,7 +688,7 @@ export default async function handler(
           story: story.story,
           storyZh: story.storyZh,
           recipe: recipe.recipe,
-          recipeZh: recipe.recipeZh ?? recipe.recipe,
+          recipeZh: recipe.recipeZh,
           imageUrl: uploadedImage.imageUrl,
           imageStorageKey: uploadedImage.imageStorageKey,
           latitude: city.latitude,
