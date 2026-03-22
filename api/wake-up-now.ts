@@ -842,12 +842,12 @@ function buildNotionProperties(
   }
 
   const imageUrlName = findPropertyName(schema, "url", ["image url", "imageurl", "image"]);
-  if (imageUrlName) {
+  if (imageUrlName && record.imageUrl) {
     properties[imageUrlName] = { url: record.imageUrl };
   }
 
   const imageStorageKeyName = findPropertyName(schema, "url", ["imagestoragekey", "image storage key"]);
-  if (imageStorageKeyName) {
+  if (imageStorageKeyName && record.imageStorageKey) {
     properties[imageStorageKeyName] = { url: record.imageStorageKey };
   }
 
@@ -909,9 +909,6 @@ export default async function handler(
     const story = await generateStory(city, greeting, context.userName);
     const breakfastConcept = await generateBreakfastConcept(city);
     const recipe = await generateRecipe(city, breakfastConcept);
-    const imagePrompt = buildImagePrompt(city, recipe);
-    const imageBinary = await callOpenAIImage(imagePrompt);
-    const uploadedImage = await uploadToR2(city.city, context.recordedAtIso, imageBinary);
 
     const createPageResponse = await fetch("https://api.notion.com/v1/pages", {
       method: "POST",
@@ -933,8 +930,8 @@ export default async function handler(
           storyZh: story.storyZh,
           recipe: recipe.recipe,
           recipeZh: recipe.recipeZh,
-          imageUrl: uploadedImage.imageUrl,
-          imageStorageKey: uploadedImage.imageStorageKey,
+          imageUrl: "",
+          imageStorageKey: "",
           latitude: city.latitude,
           longitude: city.longitude,
           utcOffset: city.utcOffset,
@@ -968,7 +965,7 @@ export default async function handler(
         recipe: recipe.recipe,
         recipeZh: recipe.recipeZh,
         recipe_zh: recipe.recipeZh,
-        imageUrl: uploadedImage.imageUrl,
+        imageUrl: "",
         latitude: city.latitude,
         longitude: city.longitude,
         utcOffset: city.utcOffset,
@@ -976,7 +973,18 @@ export default async function handler(
         recordedAt: context.recordedAt,
         timezone: context.timezone,
       },
-      imageStorageKey: uploadedImage.imageStorageKey,
+      imageJob: {
+        pageId: createdPage.id,
+        city: city.city,
+        country: city.country,
+        recordedAtIso: context.recordedAtIso,
+        recipe: {
+          title: recipe.title,
+          recipe: recipe.recipe,
+          highlightIngredients: recipe.highlightIngredients,
+          imagePrompt: recipe.imagePrompt,
+        },
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

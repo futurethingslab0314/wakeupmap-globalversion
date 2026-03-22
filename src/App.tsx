@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Map from "./components/Map";
 import DetailsPanel from "./components/DetailsPanel";
 import ParticleStorm from "./components/ParticleStorm";
-import { NotionRecord } from "./types";
+import { NotionRecord, WakeUpNowResponse } from "./types";
 import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
 import { motion, AnimatePresence } from "motion/react";
 import { Coffee, Loader2, AlertCircle, RefreshCw, Sun, Clock, Database, X, Volume2, VolumeX } from "lucide-react";
@@ -33,6 +33,14 @@ export default function App() {
       return dateB - dateA;
     });
   }, [records]);
+
+  useEffect(() => {
+    if (!selectedRecord) return;
+    const latest = records.find((record) => record.id === selectedRecord.id);
+    if (latest && latest !== selectedRecord) {
+      setSelectedRecord(latest);
+    }
+  }, [records, selectedRecord]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -77,7 +85,7 @@ export default function App() {
       });
 
       const rawResponse = await response.text();
-      let payload: any = null;
+      let payload: WakeUpNowResponse | null = null;
       const trimmedResponse = rawResponse.trim();
 
       if (trimmedResponse) {
@@ -101,9 +109,35 @@ export default function App() {
 
       if (payload?.record) {
         setSelectedRecord(payload.record);
+        setRecords((current) => {
+          const withoutCurrent = current.filter((record) => record.id !== payload?.record.id);
+          return [payload.record, ...withoutCurrent];
+        });
       }
 
-      await fetchData();
+      if (payload?.imageJob) {
+        void fetch("/api/wake-up-image", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload.imageJob),
+        })
+          .then(async (imageResponse) => {
+            if (!imageResponse.ok) {
+              const detail = await imageResponse.text();
+              console.error("Wake Up image generation failed:", detail);
+              return;
+            }
+
+            await fetchData();
+          })
+          .catch((imageError) => {
+            console.error("Wake Up image generation failed:", imageError);
+          });
+      }
+
+      void fetchData();
       soundService.playSuccess();
     } catch (err: any) {
       setError(err.message);

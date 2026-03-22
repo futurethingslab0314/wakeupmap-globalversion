@@ -19,3 +19,22 @@ export interface NotionRecord {
   utcOffset: number;
   recordedAtDate?: string;
 }
+
+export interface WakeUpImageJob {
+  pageId: string;
+  city: string;
+  country: string;
+  recordedAtIso: string;
+  recipe: {
+    title: string;
+    recipe: string;
+    highlightIngredients: string[];
+    imagePrompt?: string;
+  };
+}
+
+export interface WakeUpNowResponse {
+  record?: NotionRecord;
+  imageJob?: WakeUpImageJob;
+  error?: string;
+}
