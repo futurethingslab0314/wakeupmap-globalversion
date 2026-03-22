@@ -2,7 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import dotenv from "dotenv";
-import { locations } from "./src/data";
+import { handleNotionDataRequest } from "./src/server/routes/notionData";
 
 dotenv.config();
 
@@ -14,7 +14,7 @@ async function startServer() {
 
   // API Route to fetch local data
   app.get("/api/notion-data", async (req, res) => {
-    res.json(locations);
+    await handleNotionDataRequest(req, res);
   });
 
   // Vite middleware for development
