@@ -1,4 +1,4 @@
-import type { CityMappingRecord, SelectCityInput, SelectCityResult } from "../types";
+import type { CityMappingRecord, SelectCityInput, SelectCityResult } from "../types.ts";
 
 interface RankedCity {
   city: CityMappingRecord;

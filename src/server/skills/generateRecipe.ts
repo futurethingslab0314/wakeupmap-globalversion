@@ -1,4 +1,4 @@
-import type { BreakfastConcept, OpenAIClient, RecipeResult } from "../types";
+import type { BreakfastConcept, OpenAIClient, RecipeResult } from "../types.ts";
 
 interface GenerateRecipeInput {
   openai: Pick<OpenAIClient, "generateText">;

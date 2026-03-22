@@ -1,4 +1,4 @@
-import type { R2Client, R2UploadRequest, R2UploadResult } from "../types";
+import type { R2Client, R2UploadRequest, R2UploadResult } from "../types.ts";
 
 interface CreateR2ClientOptions {
   endpoint: string;

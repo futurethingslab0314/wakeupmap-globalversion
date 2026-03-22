@@ -1,4 +1,4 @@
-import type { OpenAIClient, OpenAIImageRequest, OpenAITextRequest } from "../types";
+import type { OpenAIClient, OpenAIImageRequest, OpenAITextRequest } from "../types.ts";
 
 interface CreateOpenAIClientOptions {
   apiKey: string;

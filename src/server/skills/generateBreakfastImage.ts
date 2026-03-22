@@ -1,4 +1,4 @@
-import type { OpenAIClient, OpenAIImageResult, RecipeResult } from "../types";
+import type { OpenAIClient, OpenAIImageResult, RecipeResult } from "../types.ts";
 
 interface GenerateBreakfastImageInput {
   openai: Pick<OpenAIClient, "generateImage">;

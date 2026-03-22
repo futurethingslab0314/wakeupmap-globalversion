@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import type { CityMappingRecord } from "../types";
+import type { CityMappingRecord } from "../types.ts";
 
 interface RawWorldCity {
   city: string;

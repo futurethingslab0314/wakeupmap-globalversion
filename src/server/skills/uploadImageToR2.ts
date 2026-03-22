@@ -1,4 +1,4 @@
-import type { OpenAIImageResult, R2Client } from "../types";
+import type { R2Client } from "../types.ts";
 
 interface UploadImageToR2Input {
   r2: Pick<R2Client, "upload">;

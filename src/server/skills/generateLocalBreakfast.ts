@@ -1,4 +1,4 @@
-import type { BreakfastConcept, CityMappingRecord, OpenAIClient } from "../types";
+import type { BreakfastConcept, CityMappingRecord, OpenAIClient } from "../types.ts";
 
 interface GenerateLocalBreakfastInput {
   openai: Pick<OpenAIClient, "generateText">;

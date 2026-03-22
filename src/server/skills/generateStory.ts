@@ -1,4 +1,4 @@
-import type { CityMappingRecord, OpenAIClient, StoryResult } from "../types";
+import type { CityMappingRecord, OpenAIClient, StoryResult } from "../types.ts";
 
 interface GenerateStoryInput {
   openai: Pick<OpenAIClient, "generateText">;

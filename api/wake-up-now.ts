@@ -1,14 +1,14 @@
-import { generateBreakfastImage } from "../src/server/skills/generateBreakfastImage";
-import { generateGreeting } from "../src/server/skills/generateGreeting";
-import { generateLocalBreakfast } from "../src/server/skills/generateLocalBreakfast";
-import { generateRecipe } from "../src/server/skills/generateRecipe";
-import { selectCity } from "../src/server/skills/selectCity";
-import { generateStory } from "../src/server/skills/generateStory";
-import { uploadImageToR2 } from "../src/server/skills/uploadImageToR2";
-import { createOpenAIClient } from "../src/server/services/openai";
-import { createR2Client } from "../src/server/services/r2";
-import { loadWorldCities } from "../src/server/services/worldCities";
-import type { NormalizedNotionRecord, RecipeResult } from "../src/server/types";
+import { generateBreakfastImage } from "../src/server/skills/generateBreakfastImage.ts";
+import { generateGreeting } from "../src/server/skills/generateGreeting.ts";
+import { generateLocalBreakfast } from "../src/server/skills/generateLocalBreakfast.ts";
+import { generateRecipe } from "../src/server/skills/generateRecipe.ts";
+import { selectCity } from "../src/server/skills/selectCity.ts";
+import { generateStory } from "../src/server/skills/generateStory.ts";
+import { uploadImageToR2 } from "../src/server/skills/uploadImageToR2.ts";
+import { createOpenAIClient } from "../src/server/services/openai.ts";
+import { createR2Client } from "../src/server/services/r2.ts";
+import { loadWorldCities } from "../src/server/services/worldCities.ts";
+import type { NormalizedNotionRecord, RecipeResult } from "../src/server/types.ts";
 
 type NotionPropertyDefinition = {
   id?: string;
