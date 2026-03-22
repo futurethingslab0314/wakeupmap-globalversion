@@ -1,5 +1,3 @@
-import { Client } from "@notionhq/client";
-
 const cityCandidates = [
   {
     id: "taipei",
@@ -193,25 +191,39 @@ export default async function handler(
     const recordedAtDate = new Date().toISOString();
     const imageUrl = `https://picsum.photos/seed/${city.id}-${recordedAtDate}/800/600`;
 
-    const notion = new Client({ auth: apiKey });
-    const createdPage = await notion.pages.create({
-      parent: { database_id: databaseId },
-      properties: buildNotionProperties({
-        city: city.city,
-        cityZh: city.cityZh,
-        country: city.country,
-        countryZh: city.countryZh,
-        greeting,
-        story,
-        storyZh,
-        recipe,
-        imageUrl,
-        latitude: city.latitude,
-        longitude: city.longitude,
-        utcOffset: city.utcOffset,
-        recordedAtDate,
+    const createPageResponse = await fetch("https://api.notion.com/v1/pages", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        parent: { database_id: databaseId },
+        properties: buildNotionProperties({
+          city: city.city,
+          cityZh: city.cityZh,
+          country: city.country,
+          countryZh: city.countryZh,
+          greeting,
+          story,
+          storyZh,
+          recipe,
+          imageUrl,
+          latitude: city.latitude,
+          longitude: city.longitude,
+          utcOffset: city.utcOffset,
+          recordedAtDate,
+        }),
       }),
     });
+
+    if (!createPageResponse.ok) {
+      const errorPayload = await createPageResponse.text();
+      throw new Error(`Notion page create failed: ${createPageResponse.status} ${errorPayload}`);
+    }
+
+    const createdPage = (await createPageResponse.json()) as { id: string };
 
     return response.status(200).json({
       record: {

@@ -1,5 +1,3 @@
-import { Client } from "@notionhq/client";
-
 const fallbackLocations = [
   {
     id: "1",
@@ -138,13 +136,27 @@ export default async function handler(
       return response.status(200).json(fallbackLocations);
     }
 
-    const notion = new Client({ auth: apiKey });
-    const queryResponse = await notion.databases.query({
-      database_id: databaseId,
+    const queryResponse = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
     });
 
-    const records = queryResponse.results
-      .map((page) => normalizePage(page as { id?: string; properties?: Record<string, unknown> }))
+    if (!queryResponse.ok) {
+      const errorPayload = await queryResponse.text();
+      throw new Error(`Notion query failed: ${queryResponse.status} ${errorPayload}`);
+    }
+
+    const queryResult = (await queryResponse.json()) as {
+      results: Array<{ id?: string; properties?: Record<string, unknown> }>;
+    };
+
+    const records = queryResult.results
+      .map((page) => normalizePage(page))
       .filter((record) => record.city);
 
     return response.status(200).json(records.length > 0 ? records : fallbackLocations);
