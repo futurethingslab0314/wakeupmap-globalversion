@@ -8,6 +8,7 @@ import {
   Graticule
 } from "react-simple-maps";
 import { NotionRecord } from "../types";
+import { getRecordCity, UiLanguage } from "../i18n";
 import { motion } from "motion/react";
 import { geoOrthographic } from "d3-geo";
 import { soundService } from "../services/soundService";
@@ -17,6 +18,7 @@ const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
 interface MapProps {
   records: NotionRecord[];
+  language: UiLanguage;
   rotation: [number, number, number];
   onRotationChange: (rotation: [number, number, number]) => void;
   onSelectRecord: (record: NotionRecord) => void;
@@ -27,6 +29,7 @@ interface MapProps {
 
 const Map: React.FC<MapProps> = ({ 
   records, 
+  language,
   rotation,
   onRotationChange,
   onSelectRecord, 
@@ -258,7 +261,7 @@ const Map: React.FC<MapProps> = ({
                     className="font-mono text-[9px] font-bold uppercase tracking-tighter fill-black pointer-events-none"
                     textAnchor="middle"
                   >
-                    {record.city}
+                    {getRecordCity(record, language)}
                   </motion.text>
                 )}
 

@@ -113,6 +113,10 @@ function getDateProperty(properties: Record<string, unknown>, key: string): stri
   return typeof start === "string" ? start : undefined;
 }
 
+function getFirstAvailableUrl(properties: Record<string, unknown>, keys: string[]): string {
+  return getFirstAvailableProperty(getUrlProperty, properties, keys);
+}
+
 function normalizePage(page: { id?: string; properties?: Record<string, unknown> }) {
   const properties = page.properties ?? {};
   const city = getFirstAvailableProperty(getRichTextProperty, properties, ["City", "city"]) ||
@@ -124,7 +128,8 @@ function normalizePage(page: { id?: string; properties?: Record<string, unknown>
   const story = getFirstAvailableProperty(getRichTextProperty, properties, ["Story", "story"]);
   const storyZh = getFirstAvailableProperty(getRichTextProperty, properties, ["Story ZH", "story zh", "storyZh", "story_zh"]) || story;
   const recipe = getFirstAvailableProperty(getRichTextProperty, properties, ["Recipe", "recipe"]);
-  const imageUrl = getFirstAvailableProperty(getUrlProperty, properties, ["Image URL", "image url", "imageUrl", "image"]);
+  const recipeZh = getFirstAvailableProperty(getRichTextProperty, properties, ["Recipe ZH", "recipe zh", "recipeZh", "recipe_zh"]) || recipe;
+  const imageUrl = getFirstAvailableUrl(properties, ["Image URL", "image url", "imageUrl", "image"]);
   const recordedAtDate =
     getDateProperty(properties, "recordedAtDate") ??
     getDateProperty(properties, "recordedAt") ??
@@ -143,6 +148,7 @@ function normalizePage(page: { id?: string; properties?: Record<string, unknown>
     story,
     story_zh: storyZh,
     recipe,
+    recipe_zh: recipeZh,
     imageUrl,
     latitude: getNumberProperty(properties, "Latitude") || getNumberProperty(properties, "latitude"),
     longitude:

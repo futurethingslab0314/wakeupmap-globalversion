@@ -124,6 +124,16 @@ const breakfastRecipeSchema = {
   required: ["title", "titleZh", "recipe", "recipeZh", "highlightIngredients", "imagePrompt"],
 } as const;
 
+const locationZhNamesSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    cityZh: { type: "string" },
+    countryZh: { type: "string" },
+  },
+  required: ["cityZh", "countryZh"],
+} as const;
+
 let cachedWorldCities: RawWorldCity[] | undefined;
 
 function normalizeKey(value: string): string {
@@ -590,6 +600,40 @@ async function generateRecipe(city: WorldCity, breakfastConcept: Awaited<ReturnT
   );
 }
 
+async function localizeLocationNames(city: WorldCity): Promise<WorldCity> {
+  const needsCityTranslation = city.cityZh.trim() === city.city.trim();
+  const needsCountryTranslation = city.countryZh.trim() === city.country.trim();
+
+  if (!needsCityTranslation && !needsCountryTranslation) {
+    return city;
+  }
+
+  const localized = parseModelJson<{ cityZh: string; countryZh: string }>(
+    await callOpenAIText(
+      [
+        "Translate place names into Traditional Chinese and return JSON.",
+        `City in English: ${city.city}`,
+        `Country in English: ${city.country}`,
+        "Return Traditional Chinese names that are natural and commonly used in Taiwan.",
+        "Return JSON with keys cityZh and countryZh.",
+      ].join("\n"),
+      {
+        type: "json_schema",
+        name: "location_zh_names",
+        schema: locationZhNamesSchema,
+        strict: true,
+      },
+    ),
+    "Location name generator",
+  );
+
+  return {
+    ...city,
+    cityZh: localized.cityZh,
+    countryZh: localized.countryZh,
+  };
+}
+
 function buildImagePrompt(city: WorldCity, recipe: RecipeResult): string {
   if (recipe.imagePrompt?.trim()) {
     return [
@@ -859,7 +903,8 @@ export default async function handler(
     const schema = database.properties ?? {};
 
     const recentCityNames = await getRecentCityNames(notionApiKey, databaseId);
-    const city = selectCity(context.nowUtcIso, recentCityNames);
+    const selectedCity = selectCity(context.nowUtcIso, recentCityNames);
+    const city = await localizeLocationNames(selectedCity);
     const greeting = await generateGreeting(city);
     const story = await generateStory(city, greeting, context.userName);
     const breakfastConcept = await generateBreakfastConcept(city);
@@ -922,6 +967,7 @@ export default async function handler(
         story_zh: story.storyZh,
         recipe: recipe.recipe,
         recipeZh: recipe.recipeZh,
+        recipe_zh: recipe.recipeZh,
         imageUrl: uploadedImage.imageUrl,
         latitude: city.latitude,
         longitude: city.longitude,

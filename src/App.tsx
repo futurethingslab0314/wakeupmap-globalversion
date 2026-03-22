@@ -3,6 +3,7 @@ import Map from "./components/Map";
 import DetailsPanel from "./components/DetailsPanel";
 import ParticleStorm from "./components/ParticleStorm";
 import { NotionRecord } from "./types";
+import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
 import { motion, AnimatePresence } from "motion/react";
 import { Coffee, Loader2, AlertCircle, RefreshCw, Sun, Clock, Database, X, Volume2, VolumeX } from "lucide-react";
 import { soundService } from "./services/soundService";
@@ -22,6 +23,8 @@ export default function App() {
   const [isNameConfirmed, setIsNameConfirmed] = useState(false);
   const [highlightedJournalIndex, setHighlightedJournalIndex] = useState(0);
   const [rotation, setRotation] = useState<[number, number, number]>([0, -20, 0]);
+  const [language, setLanguage] = useState<UiLanguage>("en");
+  const text = uiText[language];
 
   const sortedRecords = React.useMemo(() => {
     return [...records].sort((a, b) => {
@@ -66,7 +69,7 @@ export default function App() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          language: "en",
+          language,
           userName: trimmedUserName,
           clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           clientIsoTime: new Date().toISOString(),
@@ -259,6 +262,7 @@ export default function App() {
       >
         <Map
           records={records}
+          language={language}
           rotation={rotation}
           onRotationChange={setRotation}
           onSelectRecord={(record) => {
@@ -291,9 +295,9 @@ export default function App() {
         >
           {/* User Name Input */}
           <div className="pointer-events-auto group">
-            <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-1">
               <div className="w-1 h-1 bg-accent-neon rounded-full" />
-              <span className="font-mono text-[9px] text-gray-400 uppercase tracking-widest">Operator Identity</span>
+              <span className="font-mono text-[9px] text-gray-400 uppercase tracking-widest">{text.operatorIdentity}</span>
             </div>
             {isNameConfirmed ? (
               <div className="flex items-center gap-4">
@@ -304,13 +308,13 @@ export default function App() {
                   onClick={() => setIsNameConfirmed(false)}
                   className="font-mono text-[9px] text-gray-400 hover:text-black border border-black/10 px-2 py-0.5 transition-colors uppercase"
                 >
-                  Edit
+                  {text.edit}
                 </button>
               </div>
             ) : (
               <input
                 type="text"
-                placeholder="ENTER NAME..."
+                placeholder={text.enterName}
                 value={userName}
                 onChange={(e) => setUserName(e.target.value.toUpperCase())}
                 onKeyDown={(e) => {
@@ -330,10 +334,10 @@ export default function App() {
             </h1>
             <div className="mt-2 space-y-1">
               <p className="text-[10px] font-mono text-gray-400 uppercase tracking-[0.25em]">
-                Global Breakfast Network
+                {text.globalBreakfastNetwork}
               </p>
               <p className="text-[9px] font-mono text-accent-neon font-bold uppercase tracking-[0.3em]">
-                {records.length} Locations Discovered
+                {records.length} {text.locationsDiscovered}
               </p>
             </div>
           </div>
@@ -341,6 +345,25 @@ export default function App() {
 
         {/* Action Menu */}
         <div className="flex flex-col gap-6 pointer-events-auto pl-2">
+          <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.2em] text-gray-400">
+            <div className="w-10 h-[1px] bg-gray-200" />
+            <span>{text.language}</span>
+            <div className="flex border border-black/10">
+              <button
+                onClick={() => setLanguage("en")}
+                className={`px-3 py-1 transition-colors ${language === "en" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
+              >
+                {text.english}
+              </button>
+              <button
+                onClick={() => setLanguage("zh")}
+                className={`px-3 py-1 transition-colors ${language === "zh" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
+              >
+                {text.chinese}
+              </button>
+            </div>
+          </div>
+
           {/* Prominent Wake Up Now Button */}
           <motion.button
             whileHover={{ scale: 1.02, x: 5 }}
@@ -360,7 +383,7 @@ export default function App() {
               <Sun className="w-4 h-4 text-black relative z-10" />
             )}
             <span className="relative z-10 text-black">
-              {wakeUpLoading ? "Generating..." : "Wake Up Now"}
+              {wakeUpLoading ? text.generating : text.wakeUpNow}
             </span>
             <div className="w-2 h-2 bg-black rounded-none animate-pulse relative z-10" />
           </motion.button>
@@ -377,7 +400,7 @@ export default function App() {
             >
               <div className="w-10 h-[1px] bg-gray-200 group-hover:bg-black transition-colors" />
               <Database className="w-4 h-4" />
-              Review Journal
+              {text.reviewJournal}
             </motion.button>
 
             <motion.button
@@ -388,7 +411,7 @@ export default function App() {
             >
               <div className="w-10 h-[1px] bg-gray-200 group-hover:bg-black transition-colors" />
               {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-              Audio: {soundEnabled ? "ON" : "OFF"}
+              {text.audio}: {soundEnabled ? text.on : text.off}
             </motion.button>
           </div>
         </div>
@@ -428,11 +451,11 @@ export default function App() {
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-[1px] bg-black/20" />
                     <span className="font-mono text-[10px] text-gray-400 uppercase tracking-[0.3em]">
-                      System Archive // Journal
+                      {text.systemArchive}
                     </span>
                   </div>
                   <h2 className="text-5xl font-sans font-bold text-gray-900 tracking-tighter uppercase leading-none">
-                    Review Journal
+                    {text.reviewJournal}
                   </h2>
                 </div>
               </div>
@@ -443,10 +466,10 @@ export default function App() {
                     <thead>
                       <tr className="border-b border-black/10 text-gray-400 uppercase tracking-widest">
                         <th className="py-6 px-4 font-medium">Index</th>
-                        <th className="py-6 px-4 font-medium">Location</th>
-                        <th className="py-6 px-4 font-medium">Coordinates</th>
-                        <th className="py-6 px-4 font-medium">UTC Offset</th>
-                        <th className="py-6 px-4 font-medium">Action</th>
+                        <th className="py-6 px-4 font-medium">{text.location}</th>
+                        <th className="py-6 px-4 font-medium">{text.coordinates}</th>
+                        <th className="py-6 px-4 font-medium">{text.utcOffset}</th>
+                        <th className="py-6 px-4 font-medium">{text.action}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-black/5">
@@ -467,8 +490,8 @@ export default function App() {
                             )}
                           </td>
                           <td className="py-4 px-4">
-                            <div className="font-bold text-gray-900 uppercase">{record.city}</div>
-                            <div className="text-[9px] text-gray-400 uppercase tracking-widest">{record.country}</div>
+                            <div className="font-bold text-gray-900 uppercase">{getRecordCity(record, language)}</div>
+                            <div className="text-[9px] text-gray-400 uppercase tracking-widest">{getRecordCountry(record, language)}</div>
                           </td>
                           <td className="py-4 px-4 text-gray-500 tabular-nums">
                             {record.latitude.toFixed(4)} / {record.longitude.toFixed(4)}
@@ -485,7 +508,7 @@ export default function App() {
                               }}
                               className="text-[9px] uppercase tracking-widest text-gray-400 hover:text-black transition-colors"
                             >
-                              View Details //
+                              {text.viewDetails}
                             </button>
                           </td>
                         </tr>
@@ -523,7 +546,7 @@ export default function App() {
               </motion.div>
               <div className="space-y-2">
                 <p className="font-mono text-[10px] text-gray-400 uppercase tracking-[0.4em]">
-                  Synchronizing Data
+                  {text.synchronizingData}
                 </p>
                 <div className="w-48 h-[1px] bg-gray-100 mx-auto relative overflow-hidden">
                   <motion.div 
@@ -550,7 +573,7 @@ export default function App() {
               <AlertCircle className="w-16 h-16 text-red-500 mx-auto opacity-20" />
               <div className="space-y-4">
                 <h2 className="text-3xl font-sans font-bold text-gray-900 tracking-tighter uppercase">
-                  Connection Error
+                  {text.connectionError}
                 </h2>
                 <p className="font-mono text-[10px] text-gray-500 leading-relaxed uppercase tracking-widest">
                   {error}
@@ -566,7 +589,7 @@ export default function App() {
               >
                 <div className="w-12 h-[1px] bg-gray-200 group-hover:bg-black transition-colors" />
                 <RefreshCw className="w-4 h-4" />
-                Retry Connection
+                {text.retryConnection}
               </button>
             </div>
           </motion.div>
@@ -578,6 +601,7 @@ export default function App() {
         record={selectedRecord}
         continent={selectedContinent}
         records={records}
+        language={language}
         onClose={() => {
           soundService.playClick();
           setSelectedRecord(null);

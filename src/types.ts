@@ -10,6 +10,8 @@ export interface NotionRecord {
   story: string;
   storyZh?: string;
   story_zh: string;
+  recipeZh?: string;
+  recipe_zh?: string;
   longitude: number;
   latitude: number;
   imageUrl: string;

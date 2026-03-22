@@ -10,6 +10,7 @@ export interface LocationRecord {
   story: string;
   story_zh: string;
   recipe: string;
+  recipe_zh?: string;
   imageUrl: string;
   greeting: string;
 }
@@ -27,6 +28,7 @@ export const locations: LocationRecord[] = [
     story: "Waking up to the smell of fresh soy milk and youtiao in a bustling traditional market.",
     story_zh: "在熱鬧的傳統市場中，聞著新鮮豆漿和油條的香氣醒來。",
     recipe: "Traditional Soy Milk & Youtiao (Deep-fried dough sticks)",
+    recipe_zh: "傳統豆漿油條",
     imageUrl: "https://picsum.photos/seed/taipei/800/600",
     greeting: "Zao An!"
   },
@@ -42,6 +44,7 @@ export const locations: LocationRecord[] = [
     story: "A quiet morning with a traditional Japanese breakfast: grilled fish, miso soup, and rice.",
     story_zh: "寧靜的早晨，享用傳統日式早餐：烤魚、味噌湯和米飯。",
     recipe: "Grilled Mackerel with Miso Soup",
+    recipe_zh: "烤鯖魚味噌湯早餐",
     imageUrl: "https://picsum.photos/seed/tokyo/800/600",
     greeting: "Ohayou Gozaimasu!"
   },
@@ -57,6 +60,7 @@ export const locations: LocationRecord[] = [
     story: "The golden crust of a fresh croissant from the boulangerie around the corner.",
     story_zh: "轉角麵包店新鮮出爐的可頌，帶著金黃酥脆的外皮。",
     recipe: "Butter Croissant & Café au Lait",
+    recipe_zh: "奶油可頌與牛奶咖啡",
     imageUrl: "https://picsum.photos/seed/paris/800/600",
     greeting: "Bonjour!"
   },
@@ -72,6 +76,7 @@ export const locations: LocationRecord[] = [
     story: "A classic everything bagel with cream cheese while walking through Central Park.",
     story_zh: "走在中央公園時，手裡拿著經典的奶油乳酪貝果。",
     recipe: "Everything Bagel with Lox and Cream Cheese",
+    recipe_zh: "煙燻鮭魚奶油乳酪貝果",
     imageUrl: "https://picsum.photos/seed/nyc/800/600",
     greeting: "Good Morning!"
   },
@@ -87,6 +92,7 @@ export const locations: LocationRecord[] = [
     story: "A hearty full English breakfast to start a misty morning by the Thames.",
     story_zh: "在泰晤士河畔霧濛濛的早晨，享用豐盛的全套英式早餐。",
     recipe: "Full English Breakfast (Eggs, Bacon, Sausage, Beans, Toast)",
+    recipe_zh: "全套英式早餐",
     imageUrl: "https://picsum.photos/seed/london/800/600",
     greeting: "Morning, mate!"
   },
@@ -102,6 +108,7 @@ export const locations: LocationRecord[] = [
     story: "Avocado toast with a flat white, overlooking the Opera House.",
     story_zh: "看著歌劇院，享用酪梨吐司配上一杯平白咖啡。",
     recipe: "Smashed Avocado on Sourdough with Poached Eggs",
+    recipe_zh: "酪梨酸種吐司配水波蛋",
     imageUrl: "https://picsum.photos/seed/sydney/800/600",
     greeting: "G'day!"
   },
@@ -117,6 +124,7 @@ export const locations: LocationRecord[] = [
     story: "Sweet and savory Jok (rice porridge) from a street stall as the city wakes up.",
     story_zh: "城市甦醒時，路邊攤傳來熱騰騰 Jok（泰式稀飯）的鹹甜香氣。",
     recipe: "Jok (Thai Rice Congee) with Ginger and Pork",
+    recipe_zh: "薑香豬肉泰式粥",
     imageUrl: "https://picsum.photos/seed/bangkok/800/600",
     greeting: "Sawadee Krab!"
   },
@@ -132,6 +140,7 @@ export const locations: LocationRecord[] = [
     story: "A massive Turkish breakfast spread (Kahvaltı) with olives, cheeses, and honey.",
     story_zh: "豐盛的土耳其早餐（Kahvaltı），擺滿了橄欖、起司和蜂蜜。",
     recipe: "Menemen (Turkish Scrambled Eggs with Tomatoes and Peppers)",
+    recipe_zh: "梅內門番茄炒蛋",
     imageUrl: "https://picsum.photos/seed/istanbul/800/600",
     greeting: "Günaydın!"
   },
@@ -147,6 +156,7 @@ export const locations: LocationRecord[] = [
     story: "Spicy Chilaquiles that kickstart the senses in the heart of the city.",
     story_zh: "在城市中心，用香辣的 Chilaquiles 喚醒全身感官。",
     recipe: "Chilaquiles Verdes with Fried Egg",
+    recipe_zh: "青醬玉米脆片佐煎蛋",
     imageUrl: "https://picsum.photos/seed/mexico/800/600",
     greeting: "¡Buenos días!"
   },
@@ -162,6 +172,7 @@ export const locations: LocationRecord[] = [
     story: "Warm Ful Medames served with pita bread under the morning sun.",
     story_zh: "在晨曦下，享用配著皮塔餅的溫熱 Ful Medames。",
     recipe: "Ful Medames (Stewed Fava Beans with Cumin and Lemon)",
+    recipe_zh: "香料燉蠶豆配皮塔餅",
     imageUrl: "https://picsum.photos/seed/cairo/800/600",
     greeting: "Sabah el khair!"
   }
