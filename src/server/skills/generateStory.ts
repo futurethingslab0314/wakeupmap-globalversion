@@ -26,11 +26,9 @@ export async function generateStory(input: GenerateStoryInput): Promise<StoryRes
     ].join("\n"),
     responseFormat: {
       type: "json_schema",
-      json_schema: {
-        name: "wake_up_story",
-        schema: wakeUpStorySchema,
-        strict: true,
-      },
+      name: "wake_up_story",
+      schema: wakeUpStorySchema,
+      strict: true,
     },
   });
 

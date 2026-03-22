@@ -20,11 +20,9 @@ export async function generateLocalBreakfast(
     ].join("\n"),
     responseFormat: {
       type: "json_schema",
-      json_schema: {
-        name: "local_breakfast",
-        schema: localBreakfastSchema,
-        strict: true,
-      },
+      name: "local_breakfast",
+      schema: localBreakfastSchema,
+      strict: true,
     },
   });
 

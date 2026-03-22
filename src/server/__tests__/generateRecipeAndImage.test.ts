@@ -51,7 +51,7 @@ test("generateRecipe creates a practical bilingual single-serving recipe with ma
   assert.match(requests[0].userPrompt, /single-serving/i);
   assert.match(requests[0].userPrompt, /image prompt/i);
   assert.equal(requests[0].responseFormat?.type, "json_schema");
-  assert.equal(requests[0].responseFormat?.json_schema?.name, "breakfast_recipe");
+  assert.equal(requests[0].responseFormat?.name, "breakfast_recipe");
 });
 
 test("generateRecipe reports an empty JSON response with a clear error", async () => {

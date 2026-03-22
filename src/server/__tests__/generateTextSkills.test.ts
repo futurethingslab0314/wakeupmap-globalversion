@@ -72,7 +72,7 @@ test("generateStory builds bilingual output constraints including the required o
   assert.match(requests[0].userPrompt, /under 150/i);
   assert.match(requests[0].userPrompt, /YT/);
   assert.equal(requests[0].responseFormat?.type, "json_schema");
-  assert.equal(requests[0].responseFormat?.json_schema?.name, "wake_up_story");
+  assert.equal(requests[0].responseFormat?.name, "wake_up_story");
 });
 
 test("generateStory accepts JSON wrapped in a markdown code fence", async () => {
@@ -117,5 +117,5 @@ test("generateLocalBreakfast returns concept fields and canonical highlightIngre
   assert.equal(result.nameZh, "豆漿油條");
   assert.deepEqual(result.highlightIngredients, ["soy milk", "youtiao", "scallion"]);
   assert.equal(requests[0].responseFormat?.type, "json_schema");
-  assert.equal(requests[0].responseFormat?.json_schema?.name, "local_breakfast");
+  assert.equal(requests[0].responseFormat?.name, "local_breakfast");
 });

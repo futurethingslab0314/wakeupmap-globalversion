@@ -30,11 +30,9 @@ export async function generateRecipe(input: GenerateRecipeInput): Promise<Recipe
     ].join("\n"),
     responseFormat: {
       type: "json_schema",
-      json_schema: {
-        name: "breakfast_recipe",
-        schema: breakfastRecipeSchema,
-        strict: true,
-      },
+      name: "breakfast_recipe",
+      schema: breakfastRecipeSchema,
+      strict: true,
     },
   });
 

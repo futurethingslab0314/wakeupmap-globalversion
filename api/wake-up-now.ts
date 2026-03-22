@@ -65,11 +65,9 @@ type RecipeResult = {
 
 type StructuredResponseFormat = {
   type: "json_schema";
-  json_schema: {
-    name: string;
-    schema: Record<string, unknown>;
-    strict?: boolean;
-  };
+  name: string;
+  schema: Record<string, unknown>;
+  strict?: boolean;
 };
 
 const wakeUpStorySchema = {
@@ -499,11 +497,9 @@ async function generateStory(city: WorldCity, greeting: string, userName: string
       ].join("\n"),
       {
         type: "json_schema",
-        json_schema: {
-          name: "wake_up_story",
-          schema: wakeUpStorySchema,
-          strict: true,
-        },
+        name: "wake_up_story",
+        schema: wakeUpStorySchema,
+        strict: true,
       },
     ),
     "Story generator",
@@ -528,11 +524,9 @@ async function generateBreakfastConcept(city: WorldCity) {
       ].join("\n"),
       {
         type: "json_schema",
-        json_schema: {
-          name: "local_breakfast",
-          schema: localBreakfastSchema,
-          strict: true,
-        },
+        name: "local_breakfast",
+        schema: localBreakfastSchema,
+        strict: true,
       },
     ),
     "Breakfast generator",
@@ -559,11 +553,9 @@ async function generateRecipe(city: WorldCity, breakfastConcept: Awaited<ReturnT
       ].join("\n"),
       {
         type: "json_schema",
-        json_schema: {
-          name: "breakfast_recipe",
-          schema: breakfastRecipeSchema,
-          strict: true,
-        },
+        name: "breakfast_recipe",
+        schema: breakfastRecipeSchema,
+        strict: true,
       },
     ),
     "Recipe generator",

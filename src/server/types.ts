@@ -70,11 +70,9 @@ export interface OpenAITextRequest {
   userPrompt: string;
   responseFormat?: {
     type: "json_schema";
-    json_schema: {
-      name: string;
-      schema: Record<string, unknown>;
-      strict?: boolean;
-    };
+    name: string;
+    schema: Record<string, unknown>;
+    strict?: boolean;
   };
 }
 
