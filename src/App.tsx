@@ -75,21 +75,24 @@ export default function App() {
 
       const rawResponse = await response.text();
       let payload: any = null;
+      const trimmedResponse = rawResponse.trim();
 
-      if (rawResponse) {
+      if (trimmedResponse) {
         try {
           payload = JSON.parse(rawResponse);
         } catch {
-          throw new Error(
-            `Wake Up Now returned invalid JSON (${response.status}): ${rawResponse.trim() || "empty response"}`,
-          );
+          if (response.ok) {
+            throw new Error(
+              `Wake Up Now returned invalid JSON (${response.status}): ${trimmedResponse || "empty response"}`,
+            );
+          }
         }
       }
 
       if (!response.ok) {
         const detail =
           payload?.error ??
-          (rawResponse.trim() ? rawResponse.trim() : `Empty response from /api/wake-up-now (${response.status})`);
+          (trimmedResponse ? trimmedResponse : `Empty response from /api/wake-up-now (${response.status})`);
         throw new Error(`Wake Up Now failed (${response.status}): ${detail}`);
       }
 

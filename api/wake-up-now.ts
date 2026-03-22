@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { parseModelJson } from "../src/server/services/parseModelJson.ts";
 
 type NotionPropertyDefinition = {
   id?: string;
@@ -386,6 +385,27 @@ async function callOpenAIImage(prompt: string): Promise<Uint8Array> {
   }
 
   return Uint8Array.from(Buffer.from(base64, "base64"));
+}
+
+function extractJsonCandidate(value: string): string {
+  const trimmed = value.trim();
+  const fencedMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return fencedMatch ? fencedMatch[1].trim() : trimmed;
+}
+
+function parseModelJson<T>(value: string, label: string): T {
+  const candidate = extractJsonCandidate(value);
+
+  if (!candidate) {
+    throw new Error(`${label} returned empty JSON`);
+  }
+
+  try {
+    return JSON.parse(candidate) as T;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown JSON parse error";
+    throw new Error(`${label} returned invalid JSON: ${message}`);
+  }
 }
 
 async function generateGreeting(city: WorldCity): Promise<string> {
