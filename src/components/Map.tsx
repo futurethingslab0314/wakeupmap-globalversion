@@ -46,6 +46,9 @@ const Map: React.FC<MapProps> = ({
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [lastMousePos, setLastMousePos] = useState<{ x: number; y: number } | null>(null);
+  const [lastTouchPos, setLastTouchPos] = useState<{ x: number; y: number } | null>(null);
+  const [lastPinchDist, setLastPinchDist] = useState<number | null>(null);
+  const [mapScale, setMapScale] = useState(320);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Center on the selected record, or the most recent record by recordedAtDate.
@@ -102,6 +105,45 @@ const Map: React.FC<MapProps> = ({
     setLastMousePos(null);
   };
 
+  // Touch event handlers for mobile
+  const getTouchDistance = (t1: React.Touch, t2: React.Touch) => {
+    return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      setLastTouchPos({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    } else if (e.touches.length === 2) {
+      setLastTouchPos(null);
+      setLastPinchDist(getTouchDistance(e.touches[0], e.touches[1]));
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault();
+    if (e.touches.length === 1 && lastTouchPos) {
+      const dx = e.touches[0].clientX - lastTouchPos.x;
+      const dy = e.touches[0].clientY - lastTouchPos.y;
+      const sensitivity = 0.4;
+      onRotationChange([
+        rotation[0] + dx * sensitivity,
+        rotation[1] - dy * sensitivity,
+        rotation[2]
+      ]);
+      setLastTouchPos({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    } else if (e.touches.length === 2 && lastPinchDist !== null) {
+      const dist = getTouchDistance(e.touches[0], e.touches[1]);
+      const scaleFactor = dist / lastPinchDist;
+      setMapScale(prev => Math.max(160, Math.min(prev * scaleFactor, 2560)));
+      setLastPinchDist(dist);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setLastTouchPos(null);
+    setLastPinchDist(null);
+  };
+
   // Sort records by UTC offset to create a logical "awakening path"
   const sortedRecords = useMemo(() => {
     return [...records].sort((a, b) => a.utcOffset - b.utcOffset);
@@ -124,10 +166,10 @@ const Map: React.FC<MapProps> = ({
   // Create a d3 projection to calculate 2D coordinates for custom paths
   const projection = useMemo(() => {
     return geoOrthographic()
-      .scale(320)
+      .scale(mapScale)
       .rotate(rotation)
-      .translate([400, 300]); // Matches ComposableMap default dimensions
-  }, [rotation]);
+      .translate([400, 300]);
+  }, [rotation, mapScale]);
 
   // Visibility check for Orthographic projection
   const isVisible = (lon: number, lat: number) => {
@@ -147,18 +189,21 @@ const Map: React.FC<MapProps> = ({
   return (
     <div 
       ref={containerRef}
-      className="w-full h-full cursor-grab active:cursor-grabbing overflow-hidden relative"
+      className="w-full h-full cursor-grab active:cursor-grabbing overflow-hidden relative touch-none"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       <ComposableMap
         projection="geoOrthographic"
         width={800}
         height={600}
         projectionConfig={{
-          scale: 320,
+          scale: mapScale,
           rotate: rotation
         }}
         style={{ width: "100%", height: "100%" }}

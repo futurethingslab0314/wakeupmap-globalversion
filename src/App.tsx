@@ -12,7 +12,7 @@ import {
   shouldRecenterOnMainView,
 } from "./mapSelection";
 import { motion, AnimatePresence } from "motion/react";
-import { Coffee, Loader2, AlertCircle, RefreshCw, Sun, Clock, Database, X, Volume2, VolumeX, Users } from "lucide-react";
+import { Coffee, Loader2, AlertCircle, RefreshCw, Sun, Clock, Database, X, Volume2, VolumeX, Users, Globe2, ChevronLeft, ChevronRight } from "lucide-react";
 import { soundService } from "./services/soundService";
 
 export default function App() {
@@ -392,7 +392,7 @@ export default function App() {
 
       {/* Top Left: Header & Menu */}
       <motion.div 
-        className="absolute top-10 left-10 z-50 flex flex-col gap-10 pointer-events-none"
+        className="absolute top-6 left-6 lg:top-10 lg:left-10 z-50 flex flex-col gap-8 lg:gap-10 pointer-events-none"
         animate={{ 
           x: (selectedRecord || selectedContinent) ? "-120%" : (showDatabase ? "calc(100vw - 480px)" : "0%"), 
           opacity: (selectedRecord || selectedContinent) ? 0 : 1 
@@ -402,7 +402,7 @@ export default function App() {
         <motion.div
           initial={{ x: -20, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
-          className="flex flex-col gap-6"
+          className="flex flex-col gap-4 lg:gap-6"
         >
           {/* User Name Input */}
           <div className="pointer-events-auto group">
@@ -447,7 +447,7 @@ export default function App() {
           </div>
 
           <div className="pt-1">
-            <h1 className="text-3xl font-sans font-bold text-black leading-none tracking-tight uppercase">
+            <h1 className="text-2xl lg:text-3xl font-sans font-bold text-black leading-none tracking-tight uppercase">
               WakeUp Map
             </h1>
             <div className="mt-2 space-y-1">
@@ -461,27 +461,47 @@ export default function App() {
           </div>
         </motion.div>
 
-        {/* Action Menu */}
-        <div className="flex flex-col gap-6 pointer-events-auto pl-2">
-          <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.2em] text-gray-400">
-            <div className="w-10 h-[1px] bg-gray-200" />
-            <span>{text.language}</span>
-            <div className="flex border border-black/10">
-              <button
-                onClick={() => setLanguage("en")}
-                className={`px-3 py-1 transition-colors ${language === "en" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
-              >
-                {text.english}
-              </button>
-              <button
-                onClick={() => setLanguage("zh")}
-                className={`px-3 py-1 transition-colors ${language === "zh" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
-              >
-                {text.chinese}
-              </button>
-            </div>
-          </div>
+        {/* Map Mode Toggle Buttons */}
+        <div className="flex gap-2 pointer-events-auto">
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              soundService.playClick();
+              if (showWakeupToday) {
+                setShowWakeupToday(false);
+                setSelectedGroup(null);
+              }
+            }}
+            className={`flex items-center gap-2 border px-4 py-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.15em] transition-all ${
+              !showWakeupToday
+                ? "bg-black text-white border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)]"
+                : "bg-white text-gray-500 border-black/10 hover:border-black/30"
+            }`}
+          >
+            <Globe2 className="w-3.5 h-3.5" />
+            {text.myWakeupMap}
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={toggleWakeupToday}
+            className={`flex items-center gap-2 border px-4 py-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.15em] transition-all ${
+              showWakeupToday
+                ? "bg-black text-white border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.3)]"
+                : "bg-white text-gray-500 border-black/10 hover:border-black/30"
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            {text.whoWokeUpToday}
+            {showWakeupToday && (
+              <span className="text-[8px] tabular-nums opacity-70">[{todayRecords.length}]</span>
+            )}
+          </motion.button>
+        </div>
 
+        {/* Action Menu - Desktop only */}
+        <div className="hidden lg:flex flex-col gap-6 pointer-events-auto pl-2">
           {/* Prominent Wake Up Now Button */}
           <motion.button
             whileHover={{ scale: 1.02, x: 5 }}
@@ -507,22 +527,6 @@ export default function App() {
           </motion.button>
 
           <div className="flex flex-col gap-4 mt-4">
-            <motion.button
-              whileHover={{ x: 5 }}
-              onMouseEnter={() => soundService.playHover()}
-              onClick={toggleWakeupToday}
-              className={`flex items-center gap-4 font-mono text-[11px] uppercase tracking-[0.2em] transition-colors group ${
-                showWakeupToday ? "text-accent-neon" : "text-gray-400 hover:text-black"
-              }`}
-            >
-              <div className={`w-10 h-[1px] transition-colors ${showWakeupToday ? "bg-accent-neon" : "bg-gray-200 group-hover:bg-black"}`} />
-              <Users className="w-4 h-4" />
-              {text.wakeupToday}
-              {showWakeupToday && (
-                <span className="text-[9px] tabular-nums">[{todayRecords.length}]</span>
-              )}
-            </motion.button>
-
             <motion.button
               whileHover={{ x: 5 }}
               onMouseEnter={() => soundService.playHover()}
@@ -552,11 +556,24 @@ export default function App() {
         </div>
       </motion.div>
 
-      {/* Top Right: UTC Time */}
-      <div className="absolute top-10 right-10 z-10 pointer-events-none">
-        <div className="flex items-center gap-6 font-mono text-[11px] text-gray-400 uppercase tracking-[0.3em]">
-          <div className="w-16 h-[1px] bg-gray-100" />
-          UTC {currentTime.toISOString().slice(11, 16)}
+      {/* Top Right: Language Toggle */}
+      <div className="absolute top-6 right-6 lg:top-10 lg:right-10 z-10 pointer-events-auto">
+        <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.2em] text-gray-400">
+          <Globe2 className="w-3.5 h-3.5" />
+          <div className="flex border border-black/10">
+            <button
+              onClick={() => setLanguage("en")}
+              className={`px-3 py-1 transition-colors ${language === "en" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
+            >
+              {text.english}
+            </button>
+            <button
+              onClick={() => setLanguage("zh")}
+              className={`px-3 py-1 transition-colors ${language === "zh" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
+            >
+              {text.chinese}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -568,7 +585,7 @@ export default function App() {
             animate={{ x: "0%", opacity: 1 }}
             exit={{ x: "-100%", opacity: 0 }}
             transition={{ type: "spring", damping: 30, stiffness: 150 }}
-            className="absolute top-0 left-0 w-[calc(100vw-440px)] bottom-0 z-[40] overflow-hidden flex flex-col pointer-events-none"
+            className="absolute top-0 left-0 w-full lg:w-[calc(100vw-440px)] bottom-0 z-[40] overflow-hidden flex flex-col pointer-events-none"
           >
             <div className="flex-1 flex flex-col pointer-events-auto p-12 pt-16">
               <div className="flex items-start gap-8 mb-12">
@@ -745,6 +762,77 @@ export default function App() {
           setSelectedGroup(null);
         }}
       />
+
+      {/* Mobile Navigation Controls */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] pointer-events-auto bg-white border-t border-black">
+        <div className="flex items-center w-full h-16">
+          {/* Left Arrow - Journal */}
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              soundService.playClick();
+              if (showDatabase) {
+                setShowDatabase(false);
+              } else {
+                setSelectedRecord(null);
+                setSelectedContinent(null);
+                setSelectedGroup(null);
+                setShowDatabase(true);
+                setShowWakeupToday(false);
+              }
+            }}
+            className="flex-1 h-full flex items-center justify-center border-r border-black active:bg-black/5 transition-colors"
+          >
+            <ChevronLeft className="w-6 h-6 text-black" />
+          </motion.button>
+
+          {/* Center - Wake Up Now (hidden when any panel is open) */}
+          <AnimatePresence mode="wait">
+            {!(showDatabase || selectedRecord || selectedContinent || selectedGroup) && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleWakeUpNow}
+                disabled={wakeUpLoading}
+                className={`flex-[3] h-full flex items-center justify-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.15em] transition-all ${
+                  wakeUpLoading
+                    ? "bg-white text-black"
+                    : "bg-accent-neon text-black"
+                }`}
+              >
+                {wakeUpLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Sun className="w-4 h-4" />
+                )}
+                <span>{wakeUpLoading ? text.generating : text.wakeUpNow}</span>
+              </motion.button>
+            )}
+          </AnimatePresence>
+
+          {/* Right Arrow - Details */}
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              soundService.playClick();
+              if (selectedRecord || selectedContinent || selectedGroup) {
+                setSelectedRecord(null);
+                setSelectedContinent(null);
+                setSelectedGroup(null);
+              } else if (showDatabase) {
+                setShowDatabase(false);
+              } else if (sortedRecords.length > 0) {
+                setSelectedRecord(sortedRecords[0]);
+              }
+            }}
+            className="flex-1 h-full flex items-center justify-center border-l border-black active:bg-black/5 transition-colors"
+          >
+            <ChevronRight className="w-6 h-6 text-black" />
+          </motion.button>
+        </div>
+      </div>
     </div>
   );
 }

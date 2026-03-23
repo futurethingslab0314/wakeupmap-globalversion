@@ -38,9 +38,9 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, group, r
         animate={{ x: 0, opacity: 1 }}
         exit={{ x: 100, opacity: 0 }}
         transition={{ type: "spring", damping: 30, stiffness: 150 }}
-        className="fixed top-0 right-0 bottom-0 w-full max-w-xl z-50 overflow-hidden flex flex-col pointer-events-none"
+        className="fixed top-0 right-0 bottom-0 w-full lg:max-w-xl z-50 overflow-hidden flex flex-col pointer-events-none"
       >
-        <div className="flex-1 flex flex-col pointer-events-auto p-12">
+        <div className="flex-1 flex flex-col pointer-events-auto p-6 pb-24 lg:p-12 lg:pb-12">
           {/* Header */}
           <div className="flex justify-between items-start mb-12">
             <div className="space-y-4">
