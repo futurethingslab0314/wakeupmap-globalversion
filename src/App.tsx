@@ -12,7 +12,7 @@ import {
   shouldRecenterOnMainView,
 } from "./mapSelection";
 import { motion, AnimatePresence } from "motion/react";
-import { Coffee, Loader2, AlertCircle, RefreshCw, Sun, Clock, Database, X, Volume2, VolumeX } from "lucide-react";
+import { Coffee, Loader2, AlertCircle, RefreshCw, Sun, Clock, Database, X, Volume2, VolumeX, Users } from "lucide-react";
 import { soundService } from "./services/soundService";
 
 export default function App() {
@@ -22,6 +22,8 @@ export default function App() {
   const [wakeUpLoading, setWakeUpLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDatabase, setShowDatabase] = useState(false);
+  const [showWakeupToday, setShowWakeupToday] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<NotionRecord[] | null>(null);
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -53,6 +55,34 @@ export default function App() {
       return dateB - dateA;
     });
   }, [visibleRecords]);
+
+  // Wakeup Today: filter records to today's date, keep only each userName's latest record
+  const todayRecords = React.useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const todayOnly = records.filter(r => r.recordedAtDate?.slice(0, 10) === todayStr);
+    // Group by userName, keep the latest record per user
+    const byUser: Record<string, NotionRecord> = {};
+    todayOnly.forEach(r => {
+      const name = r.userName || 'Unknown';
+      const existing = byUser[name];
+      if (!existing || (r.recordedAtDate && existing.recordedAtDate && r.recordedAtDate > existing.recordedAtDate)) {
+        byUser[name] = r;
+      }
+    });
+    return Object.values(byUser);
+  }, [records]);
+
+  const toggleWakeupToday = () => {
+    soundService.playClick();
+    const next = !showWakeupToday;
+    setShowWakeupToday(next);
+    setSelectedRecord(null);
+    setSelectedGroup(null);
+    setSelectedContinent(null);
+    if (next) {
+      setShowDatabase(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedRecord) return;
@@ -351,6 +381,12 @@ export default function App() {
           }}
           selectedId={selectedRecord?.id}
           highlightedIds={highlightedIds}
+          isWakeupMode={showWakeupToday}
+          todayRecords={todayRecords}
+          onSelectGroup={(group) => {
+            soundService.playClick();
+            setSelectedGroup(group);
+          }}
         />
       </motion.div>
 
@@ -474,9 +510,26 @@ export default function App() {
             <motion.button
               whileHover={{ x: 5 }}
               onMouseEnter={() => soundService.playHover()}
+              onClick={toggleWakeupToday}
+              className={`flex items-center gap-4 font-mono text-[11px] uppercase tracking-[0.2em] transition-colors group ${
+                showWakeupToday ? "text-accent-neon" : "text-gray-400 hover:text-black"
+              }`}
+            >
+              <div className={`w-10 h-[1px] transition-colors ${showWakeupToday ? "bg-accent-neon" : "bg-gray-200 group-hover:bg-black"}`} />
+              <Users className="w-4 h-4" />
+              {text.wakeupToday}
+              {showWakeupToday && (
+                <span className="text-[9px] tabular-nums">[{todayRecords.length}]</span>
+              )}
+            </motion.button>
+
+            <motion.button
+              whileHover={{ x: 5 }}
+              onMouseEnter={() => soundService.playHover()}
               onClick={() => {
                 soundService.playClick();
                 setShowDatabase(true);
+                setShowWakeupToday(false);
               }}
               className="flex items-center gap-4 font-mono text-[11px] uppercase tracking-[0.2em] text-gray-400 hover:text-black transition-colors group"
             >
@@ -682,12 +735,14 @@ export default function App() {
       <DetailsPanel
         record={selectedRecord}
         continent={selectedContinent}
+        group={selectedGroup}
         records={visibleRecords}
         language={language}
         onClose={() => {
           soundService.playClick();
           setSelectedRecord(null);
           setSelectedContinent(null);
+          setSelectedGroup(null);
         }}
       />
     </div>

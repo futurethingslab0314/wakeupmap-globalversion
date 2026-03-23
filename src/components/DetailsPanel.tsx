@@ -8,13 +8,14 @@ import { COUNTRY_TO_CONTINENT } from "../constants/continents";
 interface DetailsPanelProps {
   record: NotionRecord | null;
   continent: string | null;
+  group: NotionRecord[] | null;
   records: NotionRecord[];
   language: UiLanguage;
   onClose: () => void;
 }
 
-const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, records, language, onClose }) => {
-  if (!record && !continent) return null;
+const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, group, records, language, onClose }) => {
+  if (!record && !continent && !group) return null;
   const text = uiText[language];
   const isBreakfastPreparing = !!record && !record.imageUrl && !getRecordRecipe(record, language);
 
@@ -46,14 +47,26 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, records,
               <div className="flex items-center gap-4">
                 <div className="w-10 h-[1px] bg-black/20" />
                 <span className="font-mono text-[10px] text-gray-400 uppercase tracking-[0.3em]">
-                  {record ? `${text.locationData} // ${record.id.slice(0, 8)}` : `${text.continentData} // ${continent}`}
+                  {group
+                    ? `${text.synchronizationPoint} // ${group.length}`
+                    : record
+                      ? `${text.locationData} // ${record.id.slice(0, 8)}`
+                      : `${text.continentData} // ${continent}`}
                 </span>
               </div>
               <h2 className="text-5xl font-mono font-bold text-gray-900 leading-[0.9] tracking-tighter uppercase">
-                {record ? getRecordCity(record, language) : continentStats?.name}
+                {group
+                  ? text.activeOperatorsToday
+                  : record
+                    ? getRecordCity(record, language)
+                    : continentStats?.name}
               </h2>
               <div className="flex items-center gap-3 font-mono text-xs text-gray-500">
-                {record ? (
+                {group ? (
+                  <span className="uppercase tracking-widest">
+                    {group.length > 0 ? getRecordCity(group[0], language) : ''}
+                  </span>
+                ) : record ? (
                   <>
                     <span className="uppercase tracking-widest">{getRecordCountry(record, language)}</span>
                     <span className="opacity-30">/</span>
@@ -77,7 +90,48 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, records,
           {/* Content */}
           <div className="flex-1 relative overflow-hidden group/scroll">
             <div className="absolute inset-0 overflow-y-auto custom-scrollbar space-y-12 pr-6 pb-12">
-              {record ? (
+              {group ? (
+                /* Personnel List View */
+                <section className="space-y-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 bg-accent-neon rounded-full shadow-[0_0_10px_rgba(0,255,0,0.6)]" />
+                    <h3 className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400">
+                      {text.activeOperatorsToday}
+                    </h3>
+                  </div>
+                  {group.length === 0 ? (
+                    <p className="font-mono text-sm text-gray-400 uppercase tracking-widest">
+                      {text.noOneToday}
+                    </p>
+                  ) : (
+                    <div className="space-y-0">
+                      {group.map((r, idx) => (
+                        <div
+                          key={r.id}
+                          className="flex items-center gap-6 p-6 border border-black/5 hover:border-accent-neon transition-colors"
+                        >
+                          <div className="font-mono text-xs text-gray-300 tabular-nums">
+                            {String(idx + 1).padStart(2, '0')}
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-mono text-lg font-bold text-gray-900 uppercase tracking-widest">
+                              {r.userName || 'Unknown'}
+                            </div>
+                            <div className="font-mono text-[10px] text-gray-400 uppercase tracking-widest mt-1">
+                              {text.statusAwake} // {r.recordedAtDate ? new Date(r.recordedAtDate).toLocaleTimeString() : 'N/A'}
+                            </div>
+                            <div className="font-mono text-[10px] text-gray-300 uppercase tracking-widest mt-0.5">
+                              {getRecordCity(r, language)}, {getRecordCountry(r, language)}
+                            </div>
+                          </div>
+                          {/* Active Status Dot */}
+                          <div className="w-2 h-2 bg-accent-neon rounded-full animate-pulse" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              ) : record ? (
                 <>
                   {/* Story Section */}
                   <section className="space-y-6">
@@ -179,7 +233,11 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, records,
           {/* Footer */}
           <div className="mt-12 pt-8 border-t border-black/5 flex justify-between items-center">
             <div className="font-mono text-[9px] text-gray-400 uppercase tracking-widest">
-              {record ? `${text.timestamp}: ${record.recordedAtDate || "N/A"}` : `${text.region}: ${continentStats?.name ?? continent}`}
+              {group
+                ? `${text.activeOperatorsToday}: ${group.length}`
+                : record
+                  ? `${text.timestamp}: ${record.recordedAtDate || "N/A"}`
+                  : `${text.region}: ${continentStats?.name ?? continent}`}
             </div>
             <div className="font-mono text-[9px] text-gray-400 uppercase tracking-widest">
               {text.status}

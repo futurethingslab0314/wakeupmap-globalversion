@@ -26,6 +26,9 @@ interface MapProps {
   onSelectContinent: (continent: string) => void;
   selectedId?: string;
   highlightedIds?: string[];
+  isWakeupMode?: boolean;
+  todayRecords?: NotionRecord[];
+  onSelectGroup?: (records: NotionRecord[]) => void;
 }
 
 const Map: React.FC<MapProps> = ({ 
@@ -36,7 +39,10 @@ const Map: React.FC<MapProps> = ({
   onSelectRecord, 
   onSelectContinent, 
   selectedId, 
-  highlightedIds = [] 
+  highlightedIds = [],
+  isWakeupMode = false,
+  todayRecords = [],
+  onSelectGroup,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [lastMousePos, setLastMousePos] = useState<{ x: number; y: number } | null>(null);
@@ -100,6 +106,20 @@ const Map: React.FC<MapProps> = ({
   const sortedRecords = useMemo(() => {
     return [...records].sort((a, b) => a.utcOffset - b.utcOffset);
   }, [records]);
+
+  // Group todayRecords by coordinate proximity for Wakeup Today mode
+  const groupedRecords = useMemo(() => {
+    if (!isWakeupMode) return [];
+    const groups: Record<string, { records: NotionRecord[]; lat: number; lon: number }> = {};
+    todayRecords.forEach(r => {
+      const key = `${r.latitude.toFixed(2)}_${r.longitude.toFixed(2)}`;
+      if (!groups[key]) {
+        groups[key] = { records: [], lat: r.latitude, lon: r.longitude };
+      }
+      groups[key].records.push(r);
+    });
+    return Object.values(groups);
+  }, [todayRecords, isWakeupMode]);
 
   // Create a d3 projection to calculate 2D coordinates for custom paths
   const projection = useMemo(() => {
@@ -219,7 +239,54 @@ const Map: React.FC<MapProps> = ({
           })}
         </g>
 
-        {records.map((record) => {
+        {/* Wakeup Today Mode: Pulsing Group Markers */}
+        {isWakeupMode && groupedRecords.map((group, idx) => {
+          if (!isVisible(group.lon, group.lat)) return null;
+          return (
+            <Marker key={`wakeup-group-${idx}`} coordinates={[group.lon, group.lat]}>
+              <motion.g
+                onClick={() => onSelectGroup?.(group.records)}
+                className="cursor-pointer"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+              >
+                {/* Inner Point */}
+                <circle r={2} fill="#000" />
+                {/* Pulsing Neon Ring */}
+                <motion.circle
+                  r={6}
+                  fill="transparent"
+                  stroke="#00FF00"
+                  strokeWidth={1}
+                  animate={{ scale: [1, 1.5, 1], opacity: [0.6, 0.2, 0.6] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                />
+                {/* Count Badge */}
+                {group.records.length > 1 && (
+                  <text
+                    y={-10}
+                    className="font-mono text-[8px] font-bold fill-accent-neon pointer-events-none"
+                    textAnchor="middle"
+                  >
+                    ×{group.records.length}
+                  </text>
+                )}
+                {/* City label */}
+                <motion.text
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: group.records.length > 1 ? -18 : -10 }}
+                  className="font-mono text-[9px] font-bold uppercase tracking-tighter fill-black pointer-events-none"
+                  textAnchor="middle"
+                >
+                  {getRecordCity(group.records[0], language)}
+                </motion.text>
+              </motion.g>
+            </Marker>
+          );
+        })}
+
+        {/* Normal Mode: Individual Markers */}
+        {!isWakeupMode && records.map((record) => {
           const isSelected = focusedRecordId === record.id;
           const isHighlighted = highlightedIds.includes(record.id);
           const long = parseFloat(record.longitude as any);
