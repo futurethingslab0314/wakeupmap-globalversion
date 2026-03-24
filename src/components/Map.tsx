@@ -11,6 +11,7 @@ import { NotionRecord } from "../types";
 import { getRecordCity, UiLanguage } from "../i18n";
 import { getLatestRecord, getRecordsSortedByRecordedAt, getWakeupGroupUserNames } from "../mapSelection";
 import { getMapOverlayScale, getStableSvgSize } from "../mapOverlayScale";
+import { getGreetingBubbleHitArea, getMarkerLabelHitArea, getWakeupBubbleHitArea } from "../mapHitTargets";
 import { motion } from "motion/react";
 import { geoOrthographic } from "d3-geo";
 import { soundService } from "../services/soundService";
@@ -324,6 +325,7 @@ const Map: React.FC<MapProps> = ({
         {isWakeupMode && groupedRecords.map((group, idx) => {
           if (!isVisible(group.lon, group.lat)) return null;
           const groupNames = getWakeupGroupUserNames(group.records);
+          const handleGroupSelect = () => onSelectGroup?.(group.records);
           const bubbleWidth = Math.max(
             getStableSvgSize(68, overlayScale),
             Math.min(
@@ -333,19 +335,34 @@ const Map: React.FC<MapProps> = ({
           );
           const bubbleHeight = groupNames.length * getStableSvgSize(14, overlayScale) + getStableSvgSize(12, overlayScale);
           const bubbleTop = -bubbleHeight - getStableSvgSize(18, overlayScale);
+          const bubbleHitArea = getWakeupBubbleHitArea(
+            bubbleWidth,
+            bubbleTop,
+            bubbleHeight,
+            getStableSvgSize(10, overlayScale),
+          );
 
           return (
             <Marker key={`wakeup-group-${idx}`} coordinates={[group.lon, group.lat]}>
               <motion.g
-                onClick={() => onSelectGroup?.(group.records)}
+                onClick={handleGroupSelect}
                 className="cursor-pointer"
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
               >
+                <rect
+                  x={bubbleHitArea.x}
+                  y={bubbleHitArea.y}
+                  width={bubbleHitArea.width}
+                  height={bubbleHitArea.height}
+                  fill="transparent"
+                  pointerEvents="all"
+                  onClick={handleGroupSelect}
+                />
                 <motion.g
                   initial={{ opacity: 0, scale: 0.9, y: 6 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
-                  className="pointer-events-none"
+                  className="pointer-events-auto"
                 >
                   <rect
                     x={-bubbleWidth / 2}
@@ -398,6 +415,15 @@ const Map: React.FC<MapProps> = ({
           const isHighlighted = highlightedIds.includes(record.id);
           const long = parseFloat(record.longitude as any);
           const lat = parseFloat(record.latitude as any);
+          const cityLabel = getRecordCity(record, language);
+          const handleRecordSelect = () => onSelectRecord(record);
+          const labelHitArea = getMarkerLabelHitArea(cityLabel, markerLabelSize);
+          const greetingHitArea = getGreetingBubbleHitArea(
+            greetingBubbleWidth,
+            greetingBubbleHeight,
+            greetingBubbleYOffset,
+            getStableSvgSize(8, overlayScale),
+          );
 
           if (isNaN(long) || isNaN(lat)) return null;
           if (!isVisible(long, lat)) return null;
@@ -409,7 +435,7 @@ const Map: React.FC<MapProps> = ({
                 animate={{ 
                   scale: isHighlighted ? 1.2 : 1,
                 }}
-                onClick={() => onSelectRecord(record)}
+                onClick={handleRecordSelect}
                 className="cursor-pointer"
               >
                 {/* Small Solid Black Dot Marker */}
@@ -433,15 +459,26 @@ const Map: React.FC<MapProps> = ({
 
                 {/* Label for selected/highlighted - Centered above as in screenshot */}
                 {(isSelected || isHighlighted) && (
-                  <motion.text
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: -8 }}
-                    className="font-mono font-bold uppercase tracking-tighter fill-black pointer-events-none"
-                    style={{ fontSize: `${markerLabelSize}px` }}
-                    textAnchor="middle"
-                  >
-                    {getRecordCity(record, language)}
-                  </motion.text>
+                  <>
+                    <rect
+                      x={labelHitArea.x}
+                      y={labelHitArea.y}
+                      width={labelHitArea.width}
+                      height={labelHitArea.height}
+                      fill="transparent"
+                      pointerEvents="all"
+                      onClick={handleRecordSelect}
+                    />
+                    <motion.text
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: -8 }}
+                      className="font-mono font-bold uppercase tracking-tighter fill-black"
+                      style={{ fontSize: `${markerLabelSize}px` }}
+                      textAnchor="middle"
+                    >
+                      {cityLabel}
+                    </motion.text>
+                  </>
                 )}
 
                 {/* Good Morning Speech Bubble */}
@@ -450,8 +487,17 @@ const Map: React.FC<MapProps> = ({
                     initial={{ opacity: 0, scale: 0, y: 0 }}
                     animate={{ opacity: 1, scale: 1, y: -greetingBubbleYOffset }}
                     transition={{ type: "spring", damping: 12, stiffness: 200 }}
-                    className="pointer-events-none"
+                    className="pointer-events-auto"
                   >
+                    <rect
+                      x={greetingHitArea.x}
+                      y={greetingHitArea.y}
+                      width={greetingHitArea.width}
+                      height={greetingHitArea.height}
+                      fill="transparent"
+                      pointerEvents="all"
+                      onClick={handleRecordSelect}
+                    />
                     {/* Bubble Background */}
                     <rect
                       x={-greetingBubbleWidth / 2}
