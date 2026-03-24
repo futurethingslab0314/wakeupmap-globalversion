@@ -48,7 +48,7 @@ body {
 
 .mobile-main-map-frame {
   top: calc(var(--safe-top) + 132px);
-  bottom: calc(var(--safe-bottom) + 152px);
+  bottom: calc(var(--safe-bottom) + 220px);
 }
 
 .custom-scrollbar::-webkit-scrollbar {

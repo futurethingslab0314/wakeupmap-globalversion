@@ -788,8 +788,8 @@ export default function App() {
             </div>
           </motion.div>
 
-          <div className="absolute inset-x-0 z-50 px-5 pointer-events-none safe-bottom-offset bottom-[calc(var(--safe-bottom)+64px)]">
-            <div className="pointer-events-auto flex gap-2 bg-white/70 backdrop-blur-sm">
+          <div className="absolute inset-x-0 z-50 px-5 pointer-events-none safe-bottom-offset bottom-[calc(var(--safe-bottom)+88px)]">
+            <div className="pointer-events-auto flex gap-2">
               <motion.button
                 whileTap={{ scale: 0.98 }}
                 onClick={() => {
@@ -799,7 +799,7 @@ export default function App() {
                     setSelectedGroup(null);
                   }
                 }}
-                className={`flex flex-1 items-center justify-center gap-2 border px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.15em] transition-all ${
+                className={`flex min-h-[58px] flex-1 items-center justify-center gap-2 border px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.15em] transition-all ${
                   !showWakeupToday
                     ? "bg-black text-white border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.25)]"
                     : "bg-white text-gray-500 border-black/10"
@@ -811,7 +811,7 @@ export default function App() {
               <motion.button
                 whileTap={{ scale: 0.98 }}
                 onClick={toggleWakeupToday}
-                className={`flex flex-1 items-center justify-center gap-2 border px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.15em] transition-all ${
+                className={`flex min-h-[58px] flex-1 items-center justify-center gap-2 border px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.15em] transition-all ${
                   showWakeupToday
                     ? "bg-black text-white border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.25)]"
                     : "bg-white text-gray-500 border-black/10"
