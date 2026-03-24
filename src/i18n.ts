@@ -110,7 +110,7 @@ export const uiText = {
     english: "English",
     chinese: "中文",
     enterGlobe: "進入地球",
-    entryTitle: "WakeUp Map",
+    entryTitle: "甦醒地圖",
     entryIdentityStatusExisting: "正在進入既有甦醒身分",
     entryIdentityStatusNew: "目前還沒有甦醒紀錄，進入後可用 Wake Up Now 建立第一筆。",
     entryIdentityStatusLoading: "同步身分索引中...",

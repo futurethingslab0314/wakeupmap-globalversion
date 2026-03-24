@@ -609,7 +609,7 @@ export default function App() {
 
           <div className="pt-1">
             <h1 className="text-2xl lg:text-3xl font-sans font-bold text-black leading-none tracking-tight uppercase">
-              WakeUp Map
+              {text.entryTitle}
             </h1>
             <div className="mt-2 space-y-1">
               <p className="text-[10px] font-mono text-gray-400 uppercase tracking-[0.25em]">
@@ -777,7 +777,7 @@ export default function App() {
           >
             <div className="space-y-2">
               <h1 className="text-4xl font-sans font-bold uppercase leading-none tracking-tight text-black">
-                Wakeup Map
+                {text.entryTitle}
               </h1>
               <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
                 {text.globalBreakfastNetwork}
@@ -788,7 +788,7 @@ export default function App() {
             </div>
           </motion.div>
 
-          <div className="absolute inset-x-0 z-50 px-4 pointer-events-none bottom-[calc(var(--safe-bottom)+92px)]">
+          <div className="fixed inset-x-0 z-[95] px-4 pointer-events-none mobile-mode-tabs-fixed">
             <div className="pointer-events-auto flex gap-2">
               <motion.button
                 whileTap={{ scale: 0.98 }}
@@ -799,7 +799,7 @@ export default function App() {
                     setSelectedGroup(null);
                   }
                 }}
-                className={`flex min-h-[58px] flex-1 items-center justify-center gap-2 border px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.15em] transition-all ${
+                className={`flex min-h-[var(--mobile-mode-tabs-height)] flex-1 items-center justify-center gap-2 border px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.15em] transition-all ${
                   !showWakeupToday
                     ? "bg-black text-white border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.25)]"
                     : "bg-white text-gray-500 border-black/10"
@@ -811,7 +811,7 @@ export default function App() {
               <motion.button
                 whileTap={{ scale: 0.98 }}
                 onClick={toggleWakeupToday}
-                className={`flex min-h-[58px] flex-1 items-center justify-center gap-2 border px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.15em] transition-all ${
+                className={`flex min-h-[var(--mobile-mode-tabs-height)] flex-1 items-center justify-center gap-2 border px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.15em] transition-all ${
                   showWakeupToday
                     ? "bg-black text-white border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.25)]"
                     : "bg-white text-gray-500 border-black/10"

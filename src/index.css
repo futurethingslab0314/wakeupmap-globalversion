@@ -28,6 +28,9 @@ body {
 :root {
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --mobile-footer-height: 64px;
+  --mobile-mode-tabs-height: 58px;
+  --mobile-mode-tabs-gap: 12px;
 }
 
 .safe-top-pad {
@@ -48,7 +51,21 @@ body {
 
 .mobile-main-map-frame {
   top: calc(var(--safe-top) + 132px);
-  bottom: calc(var(--safe-bottom) + 248px);
+  bottom: calc(
+    var(--safe-bottom) +
+    var(--mobile-footer-height) +
+    var(--mobile-mode-tabs-height) +
+    var(--mobile-mode-tabs-gap) +
+    28px
+  );
+}
+
+.mobile-mode-tabs-fixed {
+  bottom: calc(
+    var(--safe-bottom) +
+    var(--mobile-footer-height) +
+    var(--mobile-mode-tabs-gap)
+  );
 }
 
 .custom-scrollbar::-webkit-scrollbar {
