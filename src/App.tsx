@@ -719,17 +719,17 @@ export default function App() {
 
       {isMobileMainView && (
         <>
-          <div className="absolute inset-x-0 safe-top-offset z-50 px-5 pt-3 pointer-events-none">
+          <div className="absolute inset-x-0 safe-top-offset z-50 px-4 pt-2 pointer-events-none">
             <div className="pointer-events-auto flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <div className="mb-1 flex items-center gap-2">
+                <div className="mb-0.5 flex items-center gap-2">
                   <div className="h-1.5 w-1.5 rounded-full bg-accent-neon" />
-                  <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-gray-400">
+                  <span className="font-mono text-[8px] uppercase tracking-[0.24em] text-gray-400">
                     {text.operatorIdentity}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="truncate font-mono text-sm font-bold uppercase tracking-[0.2em] text-black">
+                  <span className="truncate font-mono text-[13px] font-bold uppercase tracking-[0.16em] text-black">
                     {userName}
                   </span>
                   <button
@@ -743,25 +743,25 @@ export default function App() {
                       setSelectedGroup(null);
                       setHighlightedIds([]);
                     }}
-                    className="border border-black/10 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-gray-400 transition-colors hover:text-black"
+                    className="border border-black/10 px-2 py-1 font-mono text-[8px] uppercase tracking-[0.16em] text-gray-400 transition-colors hover:text-black"
                   >
                     {text.edit}
                   </button>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-gray-400">
-                <Globe2 className="h-3.5 w-3.5 shrink-0" />
+              <div className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-gray-400">
+                <Globe2 className="h-3 w-3 shrink-0" />
                 <div className="flex border border-black/10 bg-white/90 backdrop-blur-sm">
                   <button
                     onClick={() => setLanguage("en")}
-                    className={`px-3 py-1 transition-colors ${language === "en" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
+                    className={`px-2.5 py-1 transition-colors ${language === "en" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
                   >
                     {text.english}
                   </button>
                   <button
                     onClick={() => setLanguage("zh")}
-                    className={`px-3 py-1 transition-colors ${language === "zh" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
+                    className={`px-2.5 py-1 transition-colors ${language === "zh" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
                   >
                     {text.chinese}
                   </button>
@@ -773,22 +773,22 @@ export default function App() {
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="absolute inset-x-0 safe-top-offset z-40 px-5 pt-[72px] pointer-events-none"
+            className="absolute inset-x-0 safe-top-offset z-40 px-4 pt-[56px] pointer-events-none"
           >
-            <div className="space-y-2">
-              <h1 className="text-4xl font-sans font-bold uppercase leading-none tracking-tight text-black">
+            <div className="space-y-1.5">
+              <h1 className="text-[46px] font-sans font-bold uppercase leading-[0.88] tracking-tight text-black">
                 Wakeup Map
               </h1>
-              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+              <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-gray-400">
                 {text.globalBreakfastNetwork}
               </p>
-              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-black">
+              <p className="font-mono text-[9px] font-bold uppercase tracking-[0.22em] text-black">
                 {visibleRecords.length} {text.locationsDiscovered}
               </p>
             </div>
           </motion.div>
 
-          <div className="absolute inset-x-0 z-50 px-5 pointer-events-none safe-bottom-offset bottom-[calc(var(--safe-bottom)+88px)]">
+          <div className="absolute inset-x-0 z-50 px-4 pointer-events-none safe-bottom-offset bottom-[calc(var(--safe-bottom)+92px)]">
             <div className="pointer-events-auto flex gap-2">
               <motion.button
                 whileTap={{ scale: 0.98 }}

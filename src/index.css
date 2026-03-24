@@ -47,8 +47,8 @@ body {
 }
 
 .mobile-main-map-frame {
-  top: calc(var(--safe-top) + 132px);
-  bottom: calc(var(--safe-bottom) + 220px);
+  top: calc(var(--safe-top) + 112px);
+  bottom: calc(var(--safe-bottom) + 248px);
 }
 
 .custom-scrollbar::-webkit-scrollbar {
