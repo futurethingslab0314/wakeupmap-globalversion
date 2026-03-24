@@ -9,7 +9,7 @@ import {
 } from "react-simple-maps";
 import { NotionRecord } from "../types";
 import { getRecordCity, UiLanguage } from "../i18n";
-import { getLatestRecord, getRecordsSortedByRecordedAt } from "../mapSelection";
+import { getLatestRecord, getRecordsSortedByRecordedAt, getWakeupGroupUserNames } from "../mapSelection";
 import { motion } from "motion/react";
 import { geoOrthographic } from "d3-geo";
 import { soundService } from "../services/soundService";
@@ -237,55 +237,60 @@ const Map: React.FC<MapProps> = ({
           }
         </Geographies>
 
-        {/* Custom 3D Arcing Lines */}
-        <g className="pointer-events-none">
-          {sortedRecords.map((record, index) => {
-            if (index === 0) return null;
-            const prev = sortedRecords[index - 1];
-            
-            if (!isVisible(prev.longitude, prev.latitude) || !isVisible(record.longitude, record.latitude)) {
-              return null;
-            }
+        {!isWakeupMode && (
+          <g className="pointer-events-none">
+            {sortedRecords.map((record, index) => {
+              if (index === 0) return null;
+              const prev = sortedRecords[index - 1];
+              
+              if (!isVisible(prev.longitude, prev.latitude) || !isVisible(record.longitude, record.latitude)) {
+                return null;
+              }
 
-            const p1 = projection([prev.longitude, prev.latitude]);
-            const p2 = projection([record.longitude, record.latitude]);
-            
-            if (!p1 || !p2) return null;
+              const p1 = projection([prev.longitude, prev.latitude]);
+              const p2 = projection([record.longitude, record.latitude]);
+              
+              if (!p1 || !p2) return null;
 
-            const midX = (p1[0] + p2[0]) / 2;
-            const midY = (p1[1] + p2[1]) / 2;
-            const centerX = 400;
-            const centerY = 300;
-            const vx = midX - centerX;
-            const vy = midY - centerY;
-            
-            // Higher factor for more pronounced arcs as seen in screenshot
-            const factor = 0.8; 
-            const cpX = midX + vx * factor;
-            const cpY = midY + vy * factor;
+              const midX = (p1[0] + p2[0]) / 2;
+              const midY = (p1[1] + p2[1]) / 2;
+              const centerX = 400;
+              const centerY = 300;
+              const vx = midX - centerX;
+              const vy = midY - centerY;
+              
+              const factor = 0.8; 
+              const cpX = midX + vx * factor;
+              const cpY = midY + vy * factor;
 
-            return (
-              <motion.path
-                key={`arc-${record.id}`}
-                initial={{ pathLength: 0, opacity: 0 }}
-                animate={{ pathLength: 1, opacity: 0.3 }}
-                transition={{ 
-                  duration: 2.5, 
-                  delay: index * 0.05,
-                  ease: "easeInOut"
-                }}
-                d={`M ${p1[0]} ${p1[1]} Q ${cpX} ${cpY} ${p2[0]} ${p2[1]}`}
-                fill="none"
-                stroke="#000"
-                strokeWidth={0.4}
-              />
-            );
-          })}
-        </g>
+              return (
+                <motion.path
+                  key={`arc-${record.id}`}
+                  initial={{ pathLength: 0, opacity: 0 }}
+                  animate={{ pathLength: 1, opacity: 0.3 }}
+                  transition={{ 
+                    duration: 2.5, 
+                    delay: index * 0.05,
+                    ease: "easeInOut"
+                  }}
+                  d={`M ${p1[0]} ${p1[1]} Q ${cpX} ${cpY} ${p2[0]} ${p2[1]}`}
+                  fill="none"
+                  stroke="#000"
+                  strokeWidth={0.4}
+                />
+              );
+            })}
+          </g>
+        )}
 
         {/* Wakeup Today Mode: Pulsing Group Markers */}
         {isWakeupMode && groupedRecords.map((group, idx) => {
           if (!isVisible(group.lon, group.lat)) return null;
+          const groupNames = getWakeupGroupUserNames(group.records);
+          const bubbleWidth = Math.max(68, Math.min(160, groupNames.reduce((max, name) => Math.max(max, name.length * 7 + 20), 0)));
+          const bubbleHeight = groupNames.length * 14 + 12;
+          const bubbleTop = -bubbleHeight - 18;
+
           return (
             <Marker key={`wakeup-group-${idx}`} coordinates={[group.lon, group.lat]}>
               <motion.g
@@ -294,6 +299,39 @@ const Map: React.FC<MapProps> = ({
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
               >
+                <motion.g
+                  initial={{ opacity: 0, scale: 0.9, y: 6 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  className="pointer-events-none"
+                >
+                  <rect
+                    x={-bubbleWidth / 2}
+                    y={bubbleTop}
+                    width={bubbleWidth}
+                    height={bubbleHeight}
+                    rx="6"
+                    fill="white"
+                    stroke="black"
+                    strokeWidth="0.6"
+                  />
+                  <path
+                    d={`M -6 ${-18} L 0 ${-10} L 6 ${-18} Z`}
+                    fill="white"
+                    stroke="black"
+                    strokeWidth="0.6"
+                  />
+                  {groupNames.map((name, nameIndex) => (
+                    <text
+                      key={`${name}-${nameIndex}`}
+                      x="0"
+                      y={bubbleTop + 16 + nameIndex * 14}
+                      className="font-sans text-[9px] font-bold fill-black"
+                      textAnchor="middle"
+                    >
+                      {name}
+                    </text>
+                  ))}
+                </motion.g>
                 {/* Inner Point */}
                 <circle r={2} fill="#000" />
                 {/* Pulsing Neon Ring */}
@@ -305,25 +343,6 @@ const Map: React.FC<MapProps> = ({
                   animate={{ scale: [1, 1.5, 1], opacity: [0.6, 0.2, 0.6] }}
                   transition={{ duration: 2, repeat: Infinity }}
                 />
-                {/* Count Badge */}
-                {group.records.length > 1 && (
-                  <text
-                    y={-10}
-                    className="font-mono text-[8px] font-bold fill-accent-neon pointer-events-none"
-                    textAnchor="middle"
-                  >
-                    ×{group.records.length}
-                  </text>
-                )}
-                {/* City label */}
-                <motion.text
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: group.records.length > 1 ? -18 : -10 }}
-                  className="font-mono text-[9px] font-bold uppercase tracking-tighter fill-black pointer-events-none"
-                  textAnchor="middle"
-                >
-                  {getRecordCity(group.records[0], language)}
-                </motion.text>
               </motion.g>
             </Marker>
           );

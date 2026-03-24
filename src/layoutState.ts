@@ -45,13 +45,33 @@ export function getHeaderAnimationState(isMobileViewport: boolean, view: MobileV
 
   if (view === "journal") {
     return isMobileViewport
-      ? { x: "-120%", opacity: 0 }
+      ? { x: "120%", opacity: 0 }
       : { x: "calc(100vw - 480px)", opacity: 1 };
   }
 
   return { x: "0%", opacity: 1 };
 }
 
-export function getLanguageTogglePosition(view: MobileView): "left" | "right" {
-  return view === "detail" ? "left" : "right";
+export function getLanguageToggleState(
+  isMobileViewport: boolean,
+  view: MobileView,
+): { show: boolean; position: "left" | "right" } {
+  if (view === "detail") {
+    return {
+      show: !isMobileViewport,
+      position: "left",
+    };
+  }
+
+  if (view === "journal") {
+    return {
+      show: !isMobileViewport,
+      position: "right",
+    };
+  }
+
+  return {
+    show: true,
+    position: "right",
+  };
 }

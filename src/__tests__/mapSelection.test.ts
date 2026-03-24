@@ -7,6 +7,7 @@ import {
   getLatestRecordForUser,
   getLatestRecordsForDateByUser,
   getRecordsSortedByRecordedAt,
+  getWakeupGroupUserNames,
   isMainView,
   shouldRecenterOnMainView,
 } from "../mapSelection";
@@ -120,6 +121,17 @@ test("getRecordsSortedByRecordedAt orders records from newest to oldest", () => 
   ]);
 
   assert.deepEqual(sorted.map((record) => record.id), ["latest", "middle", "oldest"]);
+});
+
+test("getWakeupGroupUserNames returns unique user names in newest-first order", () => {
+  const names = getWakeupGroupUserNames([
+    createRecord("older", "2026-03-24", "YT", { recordedAt: "08:00:00", utcOffset: 8 }),
+    createRecord("latest", "2026-03-24", "ANNIE", { recordedAt: "09:00:00", utcOffset: 8 }),
+    createRecord("duplicate", "2026-03-24", "yt", { recordedAt: "07:00:00", utcOffset: 8 }),
+    createRecord("unknown", "2026-03-24", undefined, { recordedAt: "06:00:00", utcOffset: 8 }),
+  ]);
+
+  assert.deepEqual(names, ["ANNIE", "YT", "Unknown"]);
 });
 
 test("isMainView returns true only when no detail or journal panel is open", () => {

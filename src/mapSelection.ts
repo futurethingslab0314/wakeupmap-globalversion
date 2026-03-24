@@ -39,6 +39,24 @@ export function getRecordsSortedByRecordedAt(records: NotionRecord[]): NotionRec
   return [...records].sort((left, right) => getRecordedAtTimestamp(right) - getRecordedAtTimestamp(left));
 }
 
+export function getWakeupGroupUserNames(records: NotionRecord[]): string[] {
+  const sorted = getRecordsSortedByRecordedAt(records);
+  const seen = new Set<string>();
+  const names: string[] = [];
+
+  for (const record of sorted) {
+    const displayName = record.userName?.trim() || "Unknown";
+    const normalizedName = displayName.toLowerCase();
+
+    if (!seen.has(normalizedName)) {
+      seen.add(normalizedName);
+      names.push(displayName);
+    }
+  }
+
+  return names;
+}
+
 export function getLatestRecord(records: NotionRecord[]): NotionRecord | null {
   if (records.length === 0) {
     return null;

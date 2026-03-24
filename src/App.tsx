@@ -4,7 +4,7 @@ import DetailsPanel from "./components/DetailsPanel";
 import ParticleStorm from "./components/ParticleStorm";
 import { NotionRecord, WakeUpNowResponse } from "./types";
 import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
-import { getHeaderAnimationState, getLanguageTogglePosition, getMobileNavVisibility, getMobileView } from "./layoutState";
+import { getHeaderAnimationState, getLanguageToggleState, getMobileNavVisibility, getMobileView } from "./layoutState";
 import {
   filterRecordsForUser,
   getLatestRecord,
@@ -49,7 +49,8 @@ export default function App() {
   });
   const mobileNavVisibility = getMobileNavVisibility(mobileView);
   const headerAnimationState = getHeaderAnimationState(isMobileViewport, mobileView);
-  const languageTogglePosition = getLanguageTogglePosition(mobileView);
+  const languageToggleState = getLanguageToggleState(isMobileViewport, mobileView);
+  const isMobileDetailView = isMobileViewport && mobileView === "detail";
   const currentViewState = {
     showDatabase,
     selectedRecordId: selectedRecord?.id ?? null,
@@ -358,7 +359,9 @@ export default function App() {
         style={{ backgroundImage: "radial-gradient(#000 1px, transparent 1px)", backgroundSize: "30px 30px" }}
         animate={{
           x: (rotation[0] * 0.05) + (
-            hasDetailPanelOpen 
+            isMobileDetailView
+              ? -window.innerWidth
+              : hasDetailPanelOpen 
               ? -window.innerWidth * 0.25 
               : (showDatabase ? window.innerWidth : 0)
           ),
@@ -371,8 +374,8 @@ export default function App() {
       <motion.div 
         className="absolute inset-0"
         animate={{ 
-          x: hasDetailPanelOpen ? "-25%" : (showDatabase ? "100%" : "0%"),
-          opacity: showDatabase ? 0 : 1
+          x: isMobileDetailView ? "-100%" : (hasDetailPanelOpen ? "-25%" : (showDatabase ? "100%" : "0%")),
+          opacity: (showDatabase || isMobileDetailView) ? 0 : 1
         }}
         transition={{ type: "spring", damping: 30, stiffness: 150 }}
       >
@@ -565,29 +568,31 @@ export default function App() {
       </motion.div>
 
       {/* Top Right: Language Toggle */}
-      <div
-        className={`absolute top-6 lg:top-10 z-10 pointer-events-auto transition-all ${
-          languageTogglePosition === "left" ? "left-6 lg:left-10" : "right-6 lg:right-10"
-        }`}
-      >
-        <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.2em] text-gray-400">
-          <Globe2 className="w-3.5 h-3.5" />
-          <div className="flex border border-black/10">
-            <button
-              onClick={() => setLanguage("en")}
-              className={`px-3 py-1 transition-colors ${language === "en" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
-            >
-              {text.english}
-            </button>
-            <button
-              onClick={() => setLanguage("zh")}
-              className={`px-3 py-1 transition-colors ${language === "zh" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
-            >
-              {text.chinese}
-            </button>
+      {languageToggleState.show && (
+        <div
+          className={`absolute top-6 lg:top-10 z-10 pointer-events-auto transition-all ${
+            languageToggleState.position === "left" ? "left-6 lg:left-10" : "right-6 lg:right-10"
+          }`}
+        >
+          <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.2em] text-gray-400">
+            <Globe2 className="w-3.5 h-3.5" />
+            <div className="flex border border-black/10">
+              <button
+                onClick={() => setLanguage("en")}
+                className={`px-3 py-1 transition-colors ${language === "en" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
+              >
+                {text.english}
+              </button>
+              <button
+                onClick={() => setLanguage("zh")}
+                className={`px-3 py-1 transition-colors ${language === "zh" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
+              >
+                {text.chinese}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Journal Panel (Sliding from left) */}
       <AnimatePresence>
@@ -783,7 +788,11 @@ export default function App() {
             whileTap={{ scale: 0.95 }}
             onClick={() => {
               soundService.playClick();
-              if (showDatabase) {
+              if (mobileView === "detail") {
+                setSelectedRecord(null);
+                setSelectedContinent(null);
+                setSelectedGroup(null);
+              } else if (showDatabase) {
                 setShowDatabase(false);
               } else {
                 setSelectedRecord(null);
@@ -829,11 +838,7 @@ export default function App() {
             whileTap={{ scale: 0.95 }}
             onClick={() => {
               soundService.playClick();
-              if (selectedRecord || selectedContinent || selectedGroup) {
-                setSelectedRecord(null);
-                setSelectedContinent(null);
-                setSelectedGroup(null);
-              } else if (showDatabase) {
+              if (showDatabase) {
                 setShowDatabase(false);
               } else if (sortedRecords.length > 0) {
                 setSelectedRecord(sortedRecords[0]);
