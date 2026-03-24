@@ -3,6 +3,7 @@ import Map from "./components/Map";
 import DetailsPanel from "./components/DetailsPanel";
 import ParticleStorm from "./components/ParticleStorm";
 import { NotionRecord, WakeUpNowResponse } from "./types";
+import { getIdentityPresenceState, getInitialIdentityState, normalizeIdentityName } from "./entryState";
 import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
 import { getHeaderAnimationState, getLanguageToggleState, getMobileNavVisibility, getMobileView } from "./layoutState";
 import {
@@ -19,6 +20,10 @@ import { Coffee, Loader2, AlertCircle, RefreshCw, Sun, Clock, Database, X, Volum
 import { soundService } from "./services/soundService";
 
 export default function App() {
+  const bootIdentityState =
+    typeof window !== "undefined"
+      ? getInitialIdentityState(window.location.search)
+      : { userName: "", isNameConfirmed: false, shouldShowEntryScreen: true };
   const [records, setRecords] = useState<NotionRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<NotionRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,8 +36,9 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [selectedContinent, setSelectedContinent] = useState<string | null>(null);
-  const [userName, setUserName] = useState("");
-  const [isNameConfirmed, setIsNameConfirmed] = useState(false);
+  const [userName, setUserName] = useState(bootIdentityState.userName);
+  const [isNameConfirmed, setIsNameConfirmed] = useState(bootIdentityState.isNameConfirmed);
+  const [showEntryScreen, setShowEntryScreen] = useState(bootIdentityState.shouldShowEntryScreen);
   const [highlightedJournalIndex, setHighlightedJournalIndex] = useState(0);
   const [rotation, setRotation] = useState<[number, number, number]>([0, -20, 0]);
   const [language, setLanguage] = useState<UiLanguage>("en");
@@ -40,6 +46,11 @@ export default function App() {
     typeof window !== "undefined" ? window.innerWidth < 1024 : false,
   );
   const text = uiText[language];
+  const existingIdentityNames = React.useMemo(
+    () => records.map((record) => record.userName ?? ""),
+    [records],
+  );
+  const entryIdentityStatus = getIdentityPresenceState(userName, existingIdentityNames);
   const hasDetailPanelOpen = !!(selectedRecord || selectedContinent || selectedGroup);
   const mobileView = getMobileView({
     showDatabase,
@@ -64,6 +75,7 @@ export default function App() {
 
     return filterRecordsForUser(records, userName);
   }, [records, isNameConfirmed, userName]);
+  const showIdentityEmptyState = isNameConfirmed && !loading && visibleRecords.length === 0 && !showWakeupToday;
 
   const sortedRecords = React.useMemo(() => {
     return getRecordsSortedByRecordedAt(visibleRecords);
@@ -85,6 +97,37 @@ export default function App() {
       setShowDatabase(false);
     }
   };
+
+  const handleEnterIdentity = useCallback(
+    (value: string) => {
+      const normalizedName = normalizeIdentityName(value);
+      if (!normalizedName) {
+        return;
+      }
+
+      const latestRecordForUser = getLatestRecordForUser(records, normalizedName);
+      setUserName(normalizedName);
+      setIsNameConfirmed(true);
+      setShowEntryScreen(false);
+      setSelectedRecord(null);
+      setSelectedContinent(null);
+      setSelectedGroup(null);
+      setShowDatabase(false);
+      setShowWakeupToday(false);
+      setError(null);
+
+      if (latestRecordForUser) {
+        setRotation([-latestRecordForUser.longitude, -latestRecordForUser.latitude, 0]);
+        setHighlightedIds([latestRecordForUser.id]);
+      } else {
+        setHighlightedIds([]);
+        setRotation([0, -20, 0]);
+      }
+
+      soundService.playSuccess();
+    },
+    [records],
+  );
 
   useEffect(() => {
     if (!selectedRecord) return;
@@ -261,6 +304,22 @@ export default function App() {
   }, [soundEnabled]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+
+    if (isNameConfirmed && !showEntryScreen && userName) {
+      url.searchParams.set("userName", userName);
+    } else {
+      url.searchParams.delete("userName");
+    }
+
+    window.history.replaceState({}, "", url);
+  }, [isNameConfirmed, showEntryScreen, userName]);
+
+  useEffect(() => {
     const handleResize = () => {
       setIsMobileViewport(window.innerWidth < 1024);
     };
@@ -273,7 +332,7 @@ export default function App() {
   // Keyboard Navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (loading || error) return;
+      if (loading || error || showEntryScreen) return;
 
       if (e.key === "ArrowDown") {
         if (showDatabase) {
@@ -342,7 +401,109 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [loading, error, showDatabase, records, selectedRecord, selectedContinent]);
+  }, [loading, error, showDatabase, records, selectedRecord, selectedContinent, showEntryScreen]);
+
+  if (showEntryScreen) {
+    return (
+      <div className="relative w-screen h-screen overflow-hidden font-sans select-none bg-white">
+        <ParticleStorm isShifted={false} showDatabase={false} rotation={rotation} />
+        <motion.div
+          className="absolute inset-[-20%] pointer-events-none opacity-[0.02]"
+          style={{ backgroundImage: "radial-gradient(#000 1px, transparent 1px)", backgroundSize: "30px 30px" }}
+          animate={{ x: 0, y: 0 }}
+        />
+
+        <div className="absolute top-6 right-6 lg:top-10 lg:right-10 z-10 pointer-events-auto">
+          <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.2em] text-gray-400">
+            <Globe2 className="w-3.5 h-3.5" />
+            <div className="flex border border-black/10">
+              <button
+                onClick={() => setLanguage("en")}
+                className={`px-3 py-1 transition-colors ${language === "en" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
+              >
+                {text.english}
+              </button>
+              <button
+                onClick={() => setLanguage("zh")}
+                className={`px-3 py-1 transition-colors ${language === "zh" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
+              >
+                {text.chinese}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative z-20 flex min-h-full items-center justify-center px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="w-full max-w-2xl border border-black/10 bg-white/85 p-8 backdrop-blur-sm lg:p-12"
+          >
+            <div className="mb-6 flex items-center gap-3">
+              <div className="h-2 w-2 rounded-full bg-accent-neon" />
+              <span className="font-mono text-[10px] uppercase tracking-[0.35em] text-gray-400">
+                {text.operatorIdentity}
+              </span>
+            </div>
+
+            <div className="space-y-5">
+              <h1 className="text-5xl font-sans font-bold uppercase leading-none tracking-tight text-black lg:text-7xl">
+                {text.entryTitle}
+              </h1>
+              <p className="max-w-xl font-mono text-[11px] uppercase tracking-[0.22em] text-gray-400">
+                {text.entryIdentityHint}
+              </p>
+            </div>
+
+            <div className="mt-12 space-y-5">
+              <input
+                type="text"
+                placeholder={text.enterName}
+                value={userName}
+                onChange={(e) => setUserName(normalizeIdentityName(e.target.value))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleEnterIdentity(userName);
+                  }
+                }}
+                className="w-full border-b border-black/15 bg-transparent pb-4 font-mono text-2xl font-bold uppercase tracking-[0.18em] text-black outline-none transition-colors placeholder:text-gray-200 focus:border-accent-neon"
+              />
+
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-gray-400">
+                  {loading
+                    ? text.entryIdentityStatusLoading
+                    : entryIdentityStatus === "existing"
+                      ? text.entryIdentityStatusExisting
+                      : text.entryIdentityStatusNew}
+                </p>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handleEnterIdentity(userName)}
+                  disabled={!normalizeIdentityName(userName)}
+                  className={`inline-flex items-center justify-center gap-3 border px-6 py-3 font-mono text-[11px] font-bold uppercase tracking-[0.2em] transition-all ${
+                    normalizeIdentityName(userName)
+                      ? "bg-black text-white border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,0.25)]"
+                      : "bg-white text-gray-300 border-black/10"
+                  }`}
+                >
+                  <Globe2 className="h-4 w-4" />
+                  {text.enterGlobe}
+                </motion.button>
+              </div>
+            </div>
+
+            {error ? (
+              <div className="mt-8 border border-red-200 bg-red-50/70 p-4">
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-red-500">{error}</p>
+              </div>
+            ) : null}
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-screen h-screen overflow-hidden font-sans select-none bg-white">
@@ -427,34 +588,22 @@ export default function App() {
                   {userName}
                 </span>
                 <button 
-                  onClick={() => setIsNameConfirmed(false)}
+                  onClick={() => {
+                    setIsNameConfirmed(false);
+                    setShowEntryScreen(true);
+                    setShowWakeupToday(false);
+                    setShowDatabase(false);
+                    setSelectedRecord(null);
+                    setSelectedContinent(null);
+                    setSelectedGroup(null);
+                    setHighlightedIds([]);
+                  }}
                   className="font-mono text-[9px] text-gray-400 hover:text-black border border-black/10 px-2 py-0.5 transition-colors uppercase"
                 >
                   {text.edit}
                 </button>
               </div>
-            ) : (
-              <input
-                type="text"
-                placeholder={text.enterName}
-                value={userName}
-                onChange={(e) => setUserName(e.target.value.toUpperCase())}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && userName.trim()) {
-                    const latestRecordForUser = getLatestRecordForUser(records, userName);
-                    setIsNameConfirmed(true);
-                    if (latestRecordForUser) {
-                      setSelectedRecord(latestRecordForUser);
-                      setSelectedContinent(null);
-                      setHighlightedIds([latestRecordForUser.id]);
-                      setRotation([-latestRecordForUser.longitude, -latestRecordForUser.latitude, 0]);
-                    }
-                    soundService.playSuccess();
-                  }
-                }}
-                className="bg-transparent border-b border-black/10 focus:border-accent-neon outline-none font-mono text-xs py-1 w-40 transition-colors uppercase placeholder:text-gray-200"
-              />
-            )}
+            ) : null}
           </div>
 
           <div className="pt-1">
@@ -566,6 +715,27 @@ export default function App() {
           </div>
         </div>
       </motion.div>
+
+      {showIdentityEmptyState && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="pointer-events-none absolute left-6 right-6 top-1/2 z-30 mx-auto max-w-md -translate-y-1/2 border border-black/10 bg-white/85 p-6 backdrop-blur-sm lg:left-auto lg:right-10 lg:top-1/2 lg:mx-0"
+        >
+          <div className="mb-3 flex items-center gap-3">
+            <div className="h-2 w-2 rounded-full bg-accent-neon" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-gray-400">
+              {userName}
+            </span>
+          </div>
+          <h2 className="text-2xl font-sans font-bold uppercase tracking-tight text-black">
+            {text.emptyIdentityTitle}
+          </h2>
+          <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-gray-500">
+            {text.emptyIdentityText}
+          </p>
+        </motion.div>
+      )}
 
       {/* Top Right: Language Toggle */}
       {languageToggleState.show && (
@@ -693,7 +863,7 @@ export default function App() {
 
       {/* Loading State (Data only) */}
       <AnimatePresence>
-        {loading && (
+        {loading && !showEntryScreen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
