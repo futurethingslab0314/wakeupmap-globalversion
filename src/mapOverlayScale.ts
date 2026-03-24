@@ -1,3 +1,23 @@
+export interface ViewportSize {
+  width: number;
+  height: number;
+}
+
+export function normalizeViewportSize(
+  width: number,
+  height: number,
+  fallback: ViewportSize = { width: 800, height: 600 },
+): ViewportSize {
+  if (width <= 0 || height <= 0) {
+    return fallback;
+  }
+
+  return {
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+}
+
 export function getMapOverlayScale(
   width: number,
   height: number,

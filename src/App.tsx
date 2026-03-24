@@ -877,8 +877,8 @@ export default function App() {
             transition={{ type: "spring", damping: 30, stiffness: 150 }}
             className="absolute top-0 left-0 w-full lg:w-[calc(100vw-440px)] bottom-0 z-[40] overflow-hidden flex flex-col pointer-events-none"
           >
-            <div className="flex-1 flex flex-col pointer-events-auto p-12 pt-16">
-              <div className="flex items-start gap-8 mb-12">
+            <div className="flex-1 flex flex-col pointer-events-auto px-5 pt-12 lg:p-12 lg:pt-16">
+              <div className="mb-8 flex items-start gap-5 lg:mb-12 lg:gap-8">
                 <button
                   onMouseEnter={() => soundService.playHover()}
                   onClick={() => {
@@ -896,67 +896,72 @@ export default function App() {
                       {text.systemArchive}
                     </span>
                   </div>
-                  <h2 className="text-5xl font-sans font-bold text-gray-900 tracking-tighter uppercase leading-none">
+                  <h2 className="text-4xl font-sans font-bold text-gray-900 tracking-tighter uppercase leading-none lg:text-5xl">
                     {text.reviewJournal}
                   </h2>
                 </div>
               </div>
 
               <div className="flex-1 relative overflow-hidden group/scroll">
-                <div className="absolute inset-0 overflow-y-auto custom-scrollbar pr-6">
-                  <table className="w-full text-left font-mono text-[11px]">
-                    <thead>
-                      <tr className="border-b border-black/10 text-gray-400 uppercase tracking-widest">
-                        <th className="py-6 px-4 font-medium">Index</th>
-                        <th className="py-6 px-4 font-medium">{text.location}</th>
-                        <th className="py-6 px-4 font-medium">{text.coordinates}</th>
-                        <th className="py-6 px-4 font-medium">{text.utcOffset}</th>
-                        <th className="py-6 px-4 font-medium">{text.action}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-black/5">
-                      {sortedRecords.map((record, idx) => (
-                        <tr 
-                          key={record.id} 
-                          className={`transition-colors group ${highlightedJournalIndex === idx ? 'bg-black/5' : 'hover:bg-black/[0.02]'}`}
-                          onMouseEnter={() => {
-                            setHighlightedJournalIndex(idx);
-                            soundService.playHover();
-                          }}
-                        >
-                          <td className="py-4 px-4 text-gray-300 tabular-nums">
-                            {highlightedJournalIndex === idx ? (
-                              <span className="text-accent-neon font-bold">→</span>
-                            ) : (
-                              String(idx + 1).padStart(3, '0')
-                            )}
-                          </td>
-                          <td className="py-4 px-4">
-                            <div className="font-bold text-gray-900 uppercase">{getRecordCity(record, language)}</div>
-                            <div className="text-[9px] text-gray-400 uppercase tracking-widest">{getRecordCountry(record, language)}</div>
-                          </td>
-                          <td className="py-4 px-4 text-gray-500 tabular-nums">
-                            {record.latitude.toFixed(4)} / {record.longitude.toFixed(4)}
-                          </td>
-                          <td className="py-4 px-4 text-gray-500 tabular-nums">
-                            {record.utcOffset >= 0 ? `+${record.utcOffset}` : record.utcOffset}:00
-                          </td>
-                          <td className="py-4 px-4">
-                            <button
-                              onClick={() => {
-                                soundService.playClick();
-                                setSelectedRecord(record);
-                                setShowDatabase(false);
-                              }}
-                              className="text-[9px] uppercase tracking-widest text-gray-400 hover:text-black transition-colors"
-                            >
-                              {text.viewDetails}
-                            </button>
-                          </td>
+                <div
+                  className="absolute inset-0 overflow-y-auto custom-scrollbar lg:pr-6"
+                  style={{ paddingBottom: "calc(var(--safe-bottom) + var(--mobile-footer-height) + 24px)" }}
+                >
+                  <div className="-mx-5 overflow-x-auto px-5 lg:mx-0 lg:px-0">
+                    <table className="min-w-[720px] text-left font-mono text-[11px] lg:min-w-full">
+                      <thead>
+                        <tr className="border-b border-black/10 text-gray-400 uppercase tracking-widest">
+                          <th className="py-6 px-4 font-medium">Index</th>
+                          <th className="py-6 px-4 font-medium">{text.location}</th>
+                          <th className="py-6 px-4 font-medium">{text.coordinates}</th>
+                          <th className="py-6 px-4 font-medium">{text.utcOffset}</th>
+                          <th className="py-6 px-4 font-medium">{text.action}</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-black/5">
+                        {sortedRecords.map((record, idx) => (
+                          <tr 
+                            key={record.id} 
+                            className={`transition-colors group ${highlightedJournalIndex === idx ? 'bg-black/5' : 'hover:bg-black/[0.02]'}`}
+                            onMouseEnter={() => {
+                              setHighlightedJournalIndex(idx);
+                              soundService.playHover();
+                            }}
+                          >
+                            <td className="py-4 px-4 text-gray-300 tabular-nums">
+                              {highlightedJournalIndex === idx ? (
+                                <span className="text-accent-neon font-bold">→</span>
+                              ) : (
+                                String(idx + 1).padStart(3, '0')
+                              )}
+                            </td>
+                            <td className="py-4 px-4">
+                              <div className="font-bold text-gray-900 uppercase">{getRecordCity(record, language)}</div>
+                              <div className="text-[9px] text-gray-400 uppercase tracking-widest">{getRecordCountry(record, language)}</div>
+                            </td>
+                            <td className="py-4 px-4 text-gray-500 tabular-nums">
+                              {record.latitude.toFixed(4)} / {record.longitude.toFixed(4)}
+                            </td>
+                            <td className="py-4 px-4 text-gray-500 tabular-nums">
+                              {record.utcOffset >= 0 ? `+${record.utcOffset}` : record.utcOffset}:00
+                            </td>
+                            <td className="py-4 px-4">
+                              <button
+                                onClick={() => {
+                                  soundService.playClick();
+                                  setSelectedRecord(record);
+                                  setShowDatabase(false);
+                                }}
+                                className="text-[9px] uppercase tracking-widest text-gray-400 hover:text-black transition-colors"
+                              >
+                                {text.viewDetails}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>

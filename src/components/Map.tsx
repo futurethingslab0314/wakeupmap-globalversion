@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from "react";
 import {
   ComposableMap,
   Geographies,
@@ -10,7 +10,7 @@ import {
 import { NotionRecord } from "../types";
 import { getRecordCity, UiLanguage } from "../i18n";
 import { getLatestRecord, getRecordsSortedByRecordedAt, getWakeupGroupUserNames } from "../mapSelection";
-import { getMapOverlayScale, getStableSvgSize } from "../mapOverlayScale";
+import { getMapOverlayScale, getStableSvgSize, normalizeViewportSize } from "../mapOverlayScale";
 import { getGreetingBubbleHitArea, getMarkerLabelHitArea, getWakeupBubbleHitArea } from "../mapHitTargets";
 import { motion } from "motion/react";
 import { geoOrthographic } from "d3-geo";
@@ -201,10 +201,57 @@ const Map: React.FC<MapProps> = ({
     return cosC > 0;
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = containerRef.current;
-    if (!element || typeof ResizeObserver === "undefined") {
+    if (!element) {
       return;
+    }
+
+    let rafId: number | null = null;
+
+    const measureViewport = () => {
+      const target = containerRef.current;
+      if (!target) {
+        return;
+      }
+
+      const rect = target.getBoundingClientRect();
+      const nextSize = normalizeViewportSize(rect.width, rect.height, viewportSize);
+      setViewportSize((previous) => {
+        if (previous.width === nextSize.width && previous.height === nextSize.height) {
+          return previous;
+        }
+        return nextSize;
+      });
+    };
+
+    const scheduleMeasure = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        measureViewport();
+      });
+    };
+
+    measureViewport();
+
+    const resizeHandler = () => {
+      scheduleMeasure();
+    };
+
+    window.addEventListener("resize", resizeHandler);
+    window.addEventListener("orientationchange", resizeHandler);
+
+    if (typeof ResizeObserver === "undefined") {
+      return () => {
+        window.removeEventListener("resize", resizeHandler);
+        window.removeEventListener("orientationchange", resizeHandler);
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+        }
+      };
     }
 
     const observer = new ResizeObserver((entries) => {
@@ -213,15 +260,25 @@ const Map: React.FC<MapProps> = ({
         return;
       }
 
-      setViewportSize({
-        width: entry.contentRect.width,
-        height: entry.contentRect.height,
+      const nextSize = normalizeViewportSize(entry.contentRect.width, entry.contentRect.height, viewportSize);
+      setViewportSize((previous) => {
+        if (previous.width === nextSize.width && previous.height === nextSize.height) {
+          return previous;
+        }
+        return nextSize;
       });
     });
 
     observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", resizeHandler);
+      window.removeEventListener("orientationchange", resizeHandler);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [viewportSize]);
 
   return (
     <div 
