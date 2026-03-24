@@ -4,10 +4,13 @@ import DetailsPanel from "./components/DetailsPanel";
 import ParticleStorm from "./components/ParticleStorm";
 import { NotionRecord, WakeUpNowResponse } from "./types";
 import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
+import { getHeaderAnimationState, getMobileNavVisibility, getMobileView } from "./layoutState";
 import {
   filterRecordsForUser,
   getLatestRecord,
   getLatestRecordForUser,
+  getLatestRecordsForDateByUser,
+  getRecordsSortedByRecordedAt,
   isMainView,
   shouldRecenterOnMainView,
 } from "./mapSelection";
@@ -33,7 +36,19 @@ export default function App() {
   const [highlightedJournalIndex, setHighlightedJournalIndex] = useState(0);
   const [rotation, setRotation] = useState<[number, number, number]>([0, -20, 0]);
   const [language, setLanguage] = useState<UiLanguage>("en");
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth < 1024 : false,
+  );
   const text = uiText[language];
+  const hasDetailPanelOpen = !!(selectedRecord || selectedContinent || selectedGroup);
+  const mobileView = getMobileView({
+    showDatabase,
+    hasSelectedRecord: !!selectedRecord,
+    hasSelectedContinent: !!selectedContinent,
+    hasSelectedGroup: !!selectedGroup,
+  });
+  const mobileNavVisibility = getMobileNavVisibility(mobileView);
+  const headerAnimationState = getHeaderAnimationState(isMobileViewport, mobileView);
   const currentViewState = {
     showDatabase,
     selectedRecordId: selectedRecord?.id ?? null,
@@ -49,27 +64,12 @@ export default function App() {
   }, [records, isNameConfirmed, userName]);
 
   const sortedRecords = React.useMemo(() => {
-    return [...visibleRecords].sort((a, b) => {
-      const dateA = a.recordedAtDate ? new Date(a.recordedAtDate).getTime() : 0;
-      const dateB = b.recordedAtDate ? new Date(b.recordedAtDate).getTime() : 0;
-      return dateB - dateA;
-    });
+    return getRecordsSortedByRecordedAt(visibleRecords);
   }, [visibleRecords]);
 
-  // Wakeup Today: filter records to today's date, keep only each userName's latest record
   const todayRecords = React.useMemo(() => {
-    const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const todayOnly = records.filter(r => r.recordedAtDate?.slice(0, 10) === todayStr);
-    // Group by userName, keep the latest record per user
-    const byUser: Record<string, NotionRecord> = {};
-    todayOnly.forEach(r => {
-      const name = r.userName || 'Unknown';
-      const existing = byUser[name];
-      if (!existing || (r.recordedAtDate && existing.recordedAtDate && r.recordedAtDate > existing.recordedAtDate)) {
-        byUser[name] = r;
-      }
-    });
-    return Object.values(byUser);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    return getLatestRecordsForDateByUser(records, todayStr);
   }, [records]);
 
   const toggleWakeupToday = () => {
@@ -258,6 +258,16 @@ export default function App() {
     soundService.setEnabled(soundEnabled);
   }, [soundEnabled]);
 
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileViewport(window.innerWidth < 1024);
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   // Keyboard Navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -336,7 +346,7 @@ export default function App() {
     <div className="relative w-screen h-screen overflow-hidden font-sans select-none bg-white">
       {/* Background Storm (Radial Emission & Grid Core) */}
       <ParticleStorm 
-        isShifted={!!(selectedRecord || selectedContinent)} 
+        isShifted={hasDetailPanelOpen} 
         showDatabase={showDatabase}
         rotation={rotation}
       />
@@ -347,7 +357,7 @@ export default function App() {
         style={{ backgroundImage: "radial-gradient(#000 1px, transparent 1px)", backgroundSize: "30px 30px" }}
         animate={{
           x: (rotation[0] * 0.05) + (
-            (selectedRecord || selectedContinent) 
+            hasDetailPanelOpen 
               ? -window.innerWidth * 0.25 
               : (showDatabase ? window.innerWidth : 0)
           ),
@@ -360,7 +370,7 @@ export default function App() {
       <motion.div 
         className="absolute inset-0"
         animate={{ 
-          x: (selectedRecord || selectedContinent) ? "-25%" : (showDatabase ? "100%" : "0%"),
+          x: hasDetailPanelOpen ? "-25%" : (showDatabase ? "100%" : "0%"),
           opacity: showDatabase ? 0 : 1
         }}
         transition={{ type: "spring", damping: 30, stiffness: 150 }}
@@ -393,10 +403,7 @@ export default function App() {
       {/* Top Left: Header & Menu */}
       <motion.div 
         className="absolute top-6 left-6 lg:top-10 lg:left-10 z-50 flex flex-col gap-8 lg:gap-10 pointer-events-none"
-        animate={{ 
-          x: (selectedRecord || selectedContinent) ? "-120%" : (showDatabase ? "calc(100vw - 480px)" : "0%"), 
-          opacity: (selectedRecord || selectedContinent) ? 0 : 1 
-        }}
+        animate={headerAnimationState}
         transition={{ type: "spring", damping: 30, stiffness: 150 }}
       >
         <motion.div
@@ -781,14 +788,14 @@ export default function App() {
                 setShowWakeupToday(false);
               }
             }}
-            className="flex-1 h-full flex items-center justify-center border-r border-black active:bg-black/5 transition-colors"
+            className={`${mobileNavVisibility.showLeft ? "flex" : "hidden"} flex-1 h-full items-center justify-center border-r border-black active:bg-black/5 transition-colors`}
           >
             <ChevronLeft className="w-6 h-6 text-black" />
           </motion.button>
 
           {/* Center - Wake Up Now (hidden when any panel is open) */}
           <AnimatePresence mode="wait">
-            {!(showDatabase || selectedRecord || selectedContinent || selectedGroup) && (
+            {mobileNavVisibility.showCenter && (
               <motion.button
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -827,7 +834,7 @@ export default function App() {
                 setSelectedRecord(sortedRecords[0]);
               }
             }}
-            className="flex-1 h-full flex items-center justify-center border-l border-black active:bg-black/5 transition-colors"
+            className={`${mobileNavVisibility.showRight ? "flex" : "hidden"} flex-1 h-full items-center justify-center border-l border-black active:bg-black/5 transition-colors`}
           >
             <ChevronRight className="w-6 h-6 text-black" />
           </motion.button>

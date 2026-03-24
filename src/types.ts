@@ -19,6 +19,7 @@ export interface NotionRecord {
   recipe: string;
   utcOffset: number;
   recordedAtDate?: string;
+  recordedAt?: string;
 }
 
 export interface WakeUpImageJob {

@@ -9,7 +9,7 @@ import {
 } from "react-simple-maps";
 import { NotionRecord } from "../types";
 import { getRecordCity, UiLanguage } from "../i18n";
-import { getLatestRecord } from "../mapSelection";
+import { getLatestRecord, getRecordsSortedByRecordedAt } from "../mapSelection";
 import { motion } from "motion/react";
 import { geoOrthographic } from "d3-geo";
 import { soundService } from "../services/soundService";
@@ -144,9 +144,8 @@ const Map: React.FC<MapProps> = ({
     setLastPinchDist(null);
   };
 
-  // Sort records by UTC offset to create a logical "awakening path"
   const sortedRecords = useMemo(() => {
-    return [...records].sort((a, b) => a.utcOffset - b.utcOffset);
+    return getRecordsSortedByRecordedAt(records);
   }, [records]);
 
   // Group todayRecords by coordinate proximity for Wakeup Today mode

@@ -5,12 +5,19 @@ import {
   filterRecordsForUser,
   getLatestRecord,
   getLatestRecordForUser,
+  getLatestRecordsForDateByUser,
+  getRecordsSortedByRecordedAt,
   isMainView,
   shouldRecenterOnMainView,
 } from "../mapSelection";
 import type { NotionRecord } from "../types";
 
-function createRecord(id: string, recordedAtDate?: string, userName?: string): NotionRecord {
+function createRecord(
+  id: string,
+  recordedAtDate?: string,
+  userName?: string,
+  options?: { recordedAt?: string; utcOffset?: number },
+): NotionRecord {
   return {
     id,
     ...(userName ? { userName } : {}),
@@ -26,7 +33,8 @@ function createRecord(id: string, recordedAtDate?: string, userName?: string): N
     longitude: 0,
     latitude: 0,
     imageUrl: "",
-    utcOffset: 0,
+    utcOffset: options?.utcOffset ?? 0,
+    ...(options?.recordedAt ? { recordedAt: options.recordedAt } : {}),
     ...(recordedAtDate ? { recordedAtDate } : {}),
   };
 }
@@ -39,6 +47,15 @@ test("getLatestRecord returns the newest record by recordedAtDate", () => {
   ]);
 
   assert.equal(latest?.id, "latest");
+});
+
+test("getLatestRecord uses recordedAt to break ties within the same recordedAtDate", () => {
+  const latest = getLatestRecord([
+    createRecord("older-time", "2026-03-24", "YT", { recordedAt: "08:00:00", utcOffset: 8 }),
+    createRecord("latest-time", "2026-03-24", "YT", { recordedAt: "09:30:00", utcOffset: 8 }),
+  ]);
+
+  assert.equal(latest?.id, "latest-time");
 });
 
 test("getLatestRecord falls back safely when dates are missing", () => {
@@ -74,6 +91,35 @@ test("filterRecordsForUser returns only records for the confirmed username", () 
   );
 
   assert.deepEqual(filtered.map((record) => record.id), ["one", "three"]);
+});
+
+test("getLatestRecordsForDateByUser keeps only the newest record per user for the target day", () => {
+  const filtered = getLatestRecordsForDateByUser(
+    [
+      createRecord("yt-older", "2026-03-24", "YT", { recordedAt: "01:00:00", utcOffset: 8 }),
+      createRecord("annie-today", "2026-03-24", "ANNIE", { recordedAt: "02:00:00", utcOffset: 8 }),
+      createRecord("yt-latest", "2026-03-24", "yt", { recordedAt: "03:00:00", utcOffset: 8 }),
+      createRecord("annie-yesterday", "2026-03-23", "ANNIE", { recordedAt: "23:30:00", utcOffset: 8 }),
+      createRecord("unknown-older", "2026-03-24", undefined, { recordedAt: "04:00:00", utcOffset: 8 }),
+      createRecord("unknown-latest", "2026-03-24", undefined, { recordedAt: "05:00:00", utcOffset: 8 }),
+    ],
+    "2026-03-24",
+  );
+
+  assert.deepEqual(
+    filtered.map((record) => record.id).sort(),
+    ["annie-today", "unknown-latest", "yt-latest"],
+  );
+});
+
+test("getRecordsSortedByRecordedAt orders records from newest to oldest", () => {
+  const sorted = getRecordsSortedByRecordedAt([
+    createRecord("middle", "2026-03-24", "YT", { recordedAt: "08:00:00", utcOffset: 8 }),
+    createRecord("oldest", "2026-03-24", "YT", { recordedAt: "07:00:00", utcOffset: 8 }),
+    createRecord("latest", "2026-03-24", "YT", { recordedAt: "09:00:00", utcOffset: 8 }),
+  ]);
+
+  assert.deepEqual(sorted.map((record) => record.id), ["latest", "middle", "oldest"]);
 });
 
 test("isMainView returns true only when no detail or journal panel is open", () => {

@@ -129,6 +129,7 @@ function normalizePage(page: { id?: string; properties?: Record<string, unknown>
   const storyZh = getFirstAvailableProperty(getRichTextProperty, properties, ["Story ZH", "story zh", "storyZh", "story_zh"]) || story;
   const recipe = getFirstAvailableProperty(getRichTextProperty, properties, ["Recipe", "recipe"]);
   const recipeZh = getFirstAvailableProperty(getRichTextProperty, properties, ["Recipe ZH", "recipe zh", "recipeZh", "recipe_zh"]) || recipe;
+  const recordedAt = getFirstAvailableProperty(getRichTextProperty, properties, ["recordedAt", "recorded at", "local time", "localtime"]);
   const imageUrl = getFirstAvailableUrl(properties, ["Image URL", "image url", "imageUrl", "image"]);
   const recordedAtDate =
     getDateProperty(properties, "recordedAtDate") ??
@@ -158,6 +159,7 @@ function normalizePage(page: { id?: string; properties?: Record<string, unknown>
       getNumberProperty(properties, "longtitude"),
     utcOffset: getNumberProperty(properties, "UTC Offset") || getNumberProperty(properties, "utc offset"),
     recordedAtDate,
+    recordedAt,
   };
 }
 
