@@ -788,7 +788,7 @@ export default function App() {
             </div>
           </motion.div>
 
-          <div className="absolute inset-x-0 z-50 px-4 pointer-events-none safe-bottom-offset bottom-[calc(var(--safe-bottom)+92px)]">
+          <div className="absolute inset-x-0 z-50 px-4 pointer-events-none bottom-[calc(var(--safe-bottom)+92px)]">
             <div className="pointer-events-auto flex gap-2">
               <motion.button
                 whileTap={{ scale: 0.98 }}
