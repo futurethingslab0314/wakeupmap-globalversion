@@ -10,6 +10,7 @@ import {
 import { NotionRecord } from "../types";
 import { getRecordCity, UiLanguage } from "../i18n";
 import { getLatestRecord, getRecordsSortedByRecordedAt, getWakeupGroupUserNames } from "../mapSelection";
+import { getMapOverlayScale, getStableSvgSize } from "../mapOverlayScale";
 import { motion } from "motion/react";
 import { geoOrthographic } from "d3-geo";
 import { soundService } from "../services/soundService";
@@ -49,6 +50,7 @@ const Map: React.FC<MapProps> = ({
   const [lastTouchPos, setLastTouchPos] = useState<{ x: number; y: number } | null>(null);
   const [lastPinchDist, setLastPinchDist] = useState<number | null>(null);
   const [mapScale, setMapScale] = useState(320);
+  const [viewportSize, setViewportSize] = useState({ width: 800, height: 600 });
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Center on the selected record, or the most recent record by recordedAtDate.
@@ -147,6 +149,19 @@ const Map: React.FC<MapProps> = ({
   const sortedRecords = useMemo(() => {
     return getRecordsSortedByRecordedAt(records);
   }, [records]);
+  const overlayScale = useMemo(
+    () => getMapOverlayScale(viewportSize.width, viewportSize.height),
+    [viewportSize.height, viewportSize.width],
+  );
+  const bubbleTextSize = getStableSvgSize(9, overlayScale);
+  const markerLabelSize = getStableSvgSize(9, overlayScale);
+  const greetingTextSize = getStableSvgSize(10, overlayScale);
+  const greetingBubbleWidth = getStableSvgSize(80, overlayScale);
+  const greetingBubbleHeight = getStableSvgSize(20, overlayScale);
+  const greetingBubbleRadius = getStableSvgSize(4, overlayScale);
+  const greetingBubbleYOffset = getStableSvgSize(25, overlayScale);
+  const greetingTextYOffset = getStableSvgSize(7, overlayScale);
+  const bubblePadding = getStableSvgSize(20, overlayScale);
 
   // Group todayRecords by coordinate proximity for Wakeup Today mode
   const groupedRecords = useMemo(() => {
@@ -184,6 +199,28 @@ const Map: React.FC<MapProps> = ({
     const cosC = Math.sin(-phi0) * Math.sin(phi) + Math.cos(-phi0) * Math.cos(phi) * Math.cos(lambda - (-lambda0));
     return cosC > 0;
   };
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+
+      setViewportSize({
+        width: entry.contentRect.width,
+        height: entry.contentRect.height,
+      });
+    });
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div 
@@ -287,9 +324,15 @@ const Map: React.FC<MapProps> = ({
         {isWakeupMode && groupedRecords.map((group, idx) => {
           if (!isVisible(group.lon, group.lat)) return null;
           const groupNames = getWakeupGroupUserNames(group.records);
-          const bubbleWidth = Math.max(68, Math.min(160, groupNames.reduce((max, name) => Math.max(max, name.length * 7 + 20), 0)));
-          const bubbleHeight = groupNames.length * 14 + 12;
-          const bubbleTop = -bubbleHeight - 18;
+          const bubbleWidth = Math.max(
+            getStableSvgSize(68, overlayScale),
+            Math.min(
+              getStableSvgSize(160, overlayScale),
+              groupNames.reduce((max, name) => Math.max(max, name.length * bubbleTextSize * 0.8 + bubblePadding), 0),
+            ),
+          );
+          const bubbleHeight = groupNames.length * getStableSvgSize(14, overlayScale) + getStableSvgSize(12, overlayScale);
+          const bubbleTop = -bubbleHeight - getStableSvgSize(18, overlayScale);
 
           return (
             <Marker key={`wakeup-group-${idx}`} coordinates={[group.lon, group.lat]}>
@@ -324,8 +367,9 @@ const Map: React.FC<MapProps> = ({
                     <text
                       key={`${name}-${nameIndex}`}
                       x="0"
-                      y={bubbleTop + 16 + nameIndex * 14}
-                      className="font-sans text-[9px] font-bold fill-black"
+                      y={bubbleTop + getStableSvgSize(16, overlayScale) + nameIndex * getStableSvgSize(14, overlayScale)}
+                      className="font-sans font-bold fill-black"
+                      style={{ fontSize: `${bubbleTextSize}px` }}
                       textAnchor="middle"
                     >
                       {name}
@@ -392,7 +436,8 @@ const Map: React.FC<MapProps> = ({
                   <motion.text
                     initial={{ opacity: 0, y: 5 }}
                     animate={{ opacity: 1, y: -8 }}
-                    className="font-mono text-[9px] font-bold uppercase tracking-tighter fill-black pointer-events-none"
+                    className="font-mono font-bold uppercase tracking-tighter fill-black pointer-events-none"
+                    style={{ fontSize: `${markerLabelSize}px` }}
                     textAnchor="middle"
                   >
                     {getRecordCity(record, language)}
@@ -403,17 +448,17 @@ const Map: React.FC<MapProps> = ({
                 {isSelected && (
                   <motion.g
                     initial={{ opacity: 0, scale: 0, y: 0 }}
-                    animate={{ opacity: 1, scale: 1, y: -25 }}
+                    animate={{ opacity: 1, scale: 1, y: -greetingBubbleYOffset }}
                     transition={{ type: "spring", damping: 12, stiffness: 200 }}
                     className="pointer-events-none"
                   >
                     {/* Bubble Background */}
                     <rect
-                      x="-40"
-                      y="-20"
-                      width="80"
-                      height="20"
-                      rx="4"
+                      x={-greetingBubbleWidth / 2}
+                      y={-greetingBubbleHeight}
+                      width={greetingBubbleWidth}
+                      height={greetingBubbleHeight}
+                      rx={greetingBubbleRadius}
                       fill="white"
                       stroke="black"
                       strokeWidth="0.5"
@@ -421,15 +466,16 @@ const Map: React.FC<MapProps> = ({
                     />
                     {/* Bubble Tail */}
                     <path
-                      d="M -5 0 L 0 5 L 5 0 Z"
+                      d={`M ${-getStableSvgSize(5, overlayScale)} 0 L 0 ${getStableSvgSize(5, overlayScale)} L ${getStableSvgSize(5, overlayScale)} 0 Z`}
                       fill="white"
                       stroke="black"
                       strokeWidth="0.5"
                     />
                     {/* Greeting Text */}
                     <text
-                      y="-7"
-                      className="font-sans text-[10px] font-bold fill-black"
+                      y={-greetingTextYOffset}
+                      className="font-sans font-bold fill-black"
+                      style={{ fontSize: `${greetingTextSize}px` }}
                       textAnchor="middle"
                     >
                       {record.greeting || "Good Morning!"}
