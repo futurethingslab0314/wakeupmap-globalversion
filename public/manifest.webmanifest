@@ -1,0 +1,17 @@
+{
+  "name": "Wakeup Map",
+  "short_name": "Wakeup Map",
+  "description": "A global wakeup globe mapping where you woke up and what breakfast belongs to that place.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -62,6 +62,7 @@ export default function App() {
   const headerAnimationState = getHeaderAnimationState(isMobileViewport, mobileView);
   const languageToggleState = getLanguageToggleState(isMobileViewport, mobileView);
   const isMobileDetailView = isMobileViewport && mobileView === "detail";
+  const isMobileMainView = isMobileViewport && mobileView === "main";
   const currentViewState = {
     showDatabase,
     selectedRecordId: selectedRecord?.id ?? null,
@@ -533,7 +534,7 @@ export default function App() {
 
       {/* Background Map */}
       <motion.div 
-        className="absolute inset-0"
+        className={isMobileMainView ? "absolute inset-x-0 mobile-main-map-frame" : "absolute inset-0"}
         animate={{ 
           x: isMobileDetailView ? "-100%" : (hasDetailPanelOpen ? "-25%" : (showDatabase ? "100%" : "0%")),
           opacity: (showDatabase || isMobileDetailView) ? 0 : 1
@@ -567,7 +568,7 @@ export default function App() {
 
       {/* Top Left: Header & Menu */}
       <motion.div 
-        className="absolute top-6 left-6 lg:top-10 lg:left-10 z-50 flex flex-col gap-8 lg:gap-10 pointer-events-none"
+        className="absolute top-6 left-6 z-50 hidden flex-col gap-8 pointer-events-none lg:top-10 lg:left-10 lg:flex lg:gap-10"
         animate={headerAnimationState}
         transition={{ type: "spring", damping: 30, stiffness: 150 }}
       >
@@ -716,6 +717,114 @@ export default function App() {
         </div>
       </motion.div>
 
+      {isMobileMainView && (
+        <>
+          <div className="absolute inset-x-0 safe-top-offset z-50 px-5 pt-3 pointer-events-none">
+            <div className="pointer-events-auto flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="mb-1 flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 rounded-full bg-accent-neon" />
+                  <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-gray-400">
+                    {text.operatorIdentity}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="truncate font-mono text-sm font-bold uppercase tracking-[0.2em] text-black">
+                    {userName}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setIsNameConfirmed(false);
+                      setShowEntryScreen(true);
+                      setShowWakeupToday(false);
+                      setShowDatabase(false);
+                      setSelectedRecord(null);
+                      setSelectedContinent(null);
+                      setSelectedGroup(null);
+                      setHighlightedIds([]);
+                    }}
+                    className="border border-black/10 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-gray-400 transition-colors hover:text-black"
+                  >
+                    {text.edit}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-gray-400">
+                <Globe2 className="h-3.5 w-3.5 shrink-0" />
+                <div className="flex border border-black/10 bg-white/90 backdrop-blur-sm">
+                  <button
+                    onClick={() => setLanguage("en")}
+                    className={`px-3 py-1 transition-colors ${language === "en" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
+                  >
+                    {text.english}
+                  </button>
+                  <button
+                    onClick={() => setLanguage("zh")}
+                    className={`px-3 py-1 transition-colors ${language === "zh" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
+                  >
+                    {text.chinese}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="absolute inset-x-0 safe-top-offset z-40 px-5 pt-[72px] pointer-events-none"
+          >
+            <div className="space-y-2">
+              <h1 className="text-4xl font-sans font-bold uppercase leading-none tracking-tight text-black">
+                Wakeup Map
+              </h1>
+              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
+                {text.globalBreakfastNetwork}
+              </p>
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-black">
+                {visibleRecords.length} {text.locationsDiscovered}
+              </p>
+            </div>
+          </motion.div>
+
+          <div className="absolute inset-x-0 z-50 px-5 pointer-events-none safe-bottom-offset bottom-[calc(var(--safe-bottom)+64px)]">
+            <div className="pointer-events-auto flex gap-2 bg-white/70 backdrop-blur-sm">
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  soundService.playClick();
+                  if (showWakeupToday) {
+                    setShowWakeupToday(false);
+                    setSelectedGroup(null);
+                  }
+                }}
+                className={`flex flex-1 items-center justify-center gap-2 border px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.15em] transition-all ${
+                  !showWakeupToday
+                    ? "bg-black text-white border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.25)]"
+                    : "bg-white text-gray-500 border-black/10"
+                }`}
+              >
+                <Globe2 className="h-3.5 w-3.5" />
+                {text.myWakeupMap}
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={toggleWakeupToday}
+                className={`flex flex-1 items-center justify-center gap-2 border px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.15em] transition-all ${
+                  showWakeupToday
+                    ? "bg-black text-white border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,0.25)]"
+                    : "bg-white text-gray-500 border-black/10"
+                }`}
+              >
+                <Users className="h-3.5 w-3.5" />
+                {text.whoWokeUpToday}
+              </motion.button>
+            </div>
+          </div>
+        </>
+      )}
+
       {showIdentityEmptyState && (
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -738,7 +847,7 @@ export default function App() {
       )}
 
       {/* Top Right: Language Toggle */}
-      {languageToggleState.show && (
+      {!isMobileViewport && languageToggleState.show && (
         <div
           className={`absolute top-6 lg:top-10 z-10 pointer-events-auto transition-all ${
             languageToggleState.position === "left" ? "left-6 lg:left-10" : "right-6 lg:right-10"
@@ -951,7 +1060,7 @@ export default function App() {
       />
 
       {/* Mobile Navigation Controls */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] pointer-events-auto bg-white border-t border-black">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] pointer-events-auto border-t border-black bg-white safe-bottom-pad">
         <div className="flex items-center w-full h-16">
           {/* Left Arrow - Journal */}
           <motion.button

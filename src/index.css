@@ -11,12 +11,44 @@
   --color-accent-neon: #00FF00;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
   background: radial-gradient(circle at center, #ffffff 0%, rgba(0, 255, 0, 0.1) 50%, rgba(0, 255, 0, 0.4) 100%);
   background-attachment: fixed;
   color: #000000;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-top-pad {
+  padding-top: var(--safe-top);
+}
+
+.safe-bottom-pad {
+  padding-bottom: var(--safe-bottom);
+}
+
+.safe-top-offset {
+  top: var(--safe-top);
+}
+
+.safe-bottom-offset {
+  bottom: var(--safe-bottom);
+}
+
+.mobile-main-map-frame {
+  top: calc(var(--safe-top) + 132px);
+  bottom: calc(var(--safe-bottom) + 152px);
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -55,4 +87,3 @@ body {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
-
