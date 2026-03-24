@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { getContinentName, getRecordCity, getRecordCountry, getRecordRecipe, getRecordStory } from "../i18n";
+import { getContinentName, getRecordCity, getRecordCountry, getRecordRecipe, getRecordStory, uiText } from "../i18n";
 import type { NotionRecord } from "../types";
 
 const record: NotionRecord = {
@@ -35,4 +35,9 @@ test("i18n selectors return english fields when language is en", () => {
   assert.equal(getRecordStory(record, "en"), "English story");
   assert.equal(getRecordRecipe(record, "en"), "English recipe");
   assert.equal(getContinentName("Asia", "en"), "Asia");
+});
+
+test("journal table label uses greeting in both languages", () => {
+  assert.equal(uiText.en.greeting, "Greeting");
+  assert.equal(uiText.zh.greeting, "問候");
 });

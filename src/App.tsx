@@ -908,13 +908,12 @@ export default function App() {
                   style={{ paddingBottom: "calc(var(--safe-bottom) + var(--mobile-footer-height) + 24px)" }}
                 >
                   <div className="-mx-5 overflow-x-auto px-5 lg:mx-0 lg:px-0">
-                    <table className="min-w-[720px] text-left font-mono text-[11px] lg:min-w-full">
+                    <table className="min-w-[680px] text-left font-mono text-[11px] lg:min-w-full">
                       <thead>
                         <tr className="border-b border-black/10 text-gray-400 uppercase tracking-widest">
                           <th className="py-6 px-4 font-medium">Index</th>
                           <th className="py-6 px-4 font-medium">{text.location}</th>
-                          <th className="py-6 px-4 font-medium">{text.coordinates}</th>
-                          <th className="py-6 px-4 font-medium">{text.utcOffset}</th>
+                          <th className="py-6 px-4 font-medium">{text.greeting}</th>
                           <th className="py-6 px-4 font-medium">{text.action}</th>
                         </tr>
                       </thead>
@@ -939,11 +938,10 @@ export default function App() {
                               <div className="font-bold text-gray-900 uppercase">{getRecordCity(record, language)}</div>
                               <div className="text-[9px] text-gray-400 uppercase tracking-widest">{getRecordCountry(record, language)}</div>
                             </td>
-                            <td className="py-4 px-4 text-gray-500 tabular-nums">
-                              {record.latitude.toFixed(4)} / {record.longitude.toFixed(4)}
-                            </td>
-                            <td className="py-4 px-4 text-gray-500 tabular-nums">
-                              {record.utcOffset >= 0 ? `+${record.utcOffset}` : record.utcOffset}:00
+                            <td className="py-4 px-4 text-gray-500">
+                              <div className="max-w-[280px] whitespace-normal leading-relaxed">
+                                {record.greeting}
+                              </div>
                             </td>
                             <td className="py-4 px-4">
                               <button
