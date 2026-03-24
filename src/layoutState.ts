@@ -51,3 +51,7 @@ export function getHeaderAnimationState(isMobileViewport: boolean, view: MobileV
 
   return { x: "0%", opacity: 1 };
 }
+
+export function getLanguageTogglePosition(view: MobileView): "left" | "right" {
+  return view === "detail" ? "left" : "right";
+}

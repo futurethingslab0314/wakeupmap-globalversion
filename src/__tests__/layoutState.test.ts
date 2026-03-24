@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { getHeaderAnimationState, getMobileNavVisibility, getMobileView } from "../layoutState";
+import { getHeaderAnimationState, getLanguageTogglePosition, getMobileNavVisibility, getMobileView } from "../layoutState";
 
 test("getMobileView returns journal when the review journal is open", () => {
   assert.equal(
@@ -53,4 +53,9 @@ test("getHeaderAnimationState keeps the desktop header visible beside the journa
     x: "calc(100vw - 480px)",
     opacity: 1,
   });
+});
+
+test("getLanguageTogglePosition moves the language switcher to the left on detail view", () => {
+  assert.equal(getLanguageTogglePosition("detail"), "left");
+  assert.equal(getLanguageTogglePosition("main"), "right");
 });

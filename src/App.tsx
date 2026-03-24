@@ -4,7 +4,7 @@ import DetailsPanel from "./components/DetailsPanel";
 import ParticleStorm from "./components/ParticleStorm";
 import { NotionRecord, WakeUpNowResponse } from "./types";
 import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
-import { getHeaderAnimationState, getMobileNavVisibility, getMobileView } from "./layoutState";
+import { getHeaderAnimationState, getLanguageTogglePosition, getMobileNavVisibility, getMobileView } from "./layoutState";
 import {
   filterRecordsForUser,
   getLatestRecord,
@@ -49,6 +49,7 @@ export default function App() {
   });
   const mobileNavVisibility = getMobileNavVisibility(mobileView);
   const headerAnimationState = getHeaderAnimationState(isMobileViewport, mobileView);
+  const languageTogglePosition = getLanguageTogglePosition(mobileView);
   const currentViewState = {
     showDatabase,
     selectedRecordId: selectedRecord?.id ?? null,
@@ -564,7 +565,11 @@ export default function App() {
       </motion.div>
 
       {/* Top Right: Language Toggle */}
-      <div className="absolute top-6 right-6 lg:top-10 lg:right-10 z-10 pointer-events-auto">
+      <div
+        className={`absolute top-6 lg:top-10 z-10 pointer-events-auto transition-all ${
+          languageTogglePosition === "left" ? "left-6 lg:left-10" : "right-6 lg:right-10"
+        }`}
+      >
         <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.2em] text-gray-400">
           <Globe2 className="w-3.5 h-3.5" />
           <div className="flex border border-black/10">
