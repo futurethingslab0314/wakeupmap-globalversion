@@ -392,6 +392,8 @@ const Map: React.FC<MapProps> = ({
           );
           const bubbleHeight = groupNames.length * getStableSvgSize(14, overlayScale) + getStableSvgSize(12, overlayScale);
           const bubbleTop = -bubbleHeight - getStableSvgSize(18, overlayScale);
+          const bubbleTailBaseY = bubbleTop + bubbleHeight - getStableSvgSize(1.25, overlayScale);
+          const bubbleTailTipY = bubbleTailBaseY + getStableSvgSize(8, overlayScale);
           const bubbleHitArea = getWakeupBubbleHitArea(
             bubbleWidth,
             bubbleTop,
@@ -432,7 +434,7 @@ const Map: React.FC<MapProps> = ({
                     strokeWidth="0.6"
                   />
                   <path
-                    d={`M -6 ${-18} L 0 ${-10} L 6 ${-18} Z`}
+                    d={`M ${-getStableSvgSize(6, overlayScale)} ${bubbleTailBaseY} L 0 ${bubbleTailTipY} L ${getStableSvgSize(6, overlayScale)} ${bubbleTailBaseY} Z`}
                     fill="white"
                     stroke="black"
                     strokeWidth="0.6"
