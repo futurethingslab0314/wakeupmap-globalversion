@@ -406,7 +406,7 @@ export default function App() {
 
   if (showEntryScreen) {
     return (
-      <div className="relative w-screen h-screen overflow-hidden font-sans select-none bg-white">
+      <div className="relative w-screen h-[100dvh] overflow-hidden font-sans select-none bg-white">
         <ParticleStorm isShifted={false} showDatabase={false} rotation={rotation} />
         <motion.div
           className="absolute inset-[-20%] pointer-events-none opacity-[0.02]"
@@ -507,7 +507,7 @@ export default function App() {
   }
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden font-sans select-none bg-white">
+    <div className="relative w-screen h-[100dvh] overflow-hidden font-sans select-none bg-white">
       {/* Background Storm (Radial Emission & Grid Core) */}
       <ParticleStorm 
         isShifted={hasDetailPanelOpen} 
@@ -611,11 +611,8 @@ export default function App() {
             <h1 className="text-2xl lg:text-3xl font-sans font-bold text-black leading-none tracking-tight uppercase">
               {text.entryTitle}
             </h1>
-            <div className="mt-2 space-y-1">
-              <p className="text-[10px] font-mono text-gray-400 uppercase tracking-[0.25em]">
-                {text.globalBreakfastNetwork}
-              </p>
-              <p className="text-[9px] font-mono text-black font-bold uppercase tracking-[0.3em]">
+            <div className="mt-2">
+              <p className="text-[9px] font-mono font-bold uppercase tracking-[0.3em] text-black/70">
                 {visibleRecords.length} {text.locationsDiscovered}
               </p>
             </div>
@@ -779,10 +776,7 @@ export default function App() {
               <h1 className="text-4xl font-sans font-bold uppercase leading-none tracking-tight text-black">
                 {text.entryTitle}
               </h1>
-              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-gray-400">
-                {text.globalBreakfastNetwork}
-              </p>
-              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-black">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-black/70">
                 {visibleRecords.length} {text.locationsDiscovered}
               </p>
             </div>
