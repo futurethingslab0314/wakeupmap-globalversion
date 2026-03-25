@@ -1,4 +1,9 @@
-import type { CityMappingRecord, OpenAIClient, StoryResult } from "../types.ts";
+import type {
+  CityMappingRecord,
+  OpenAIClient,
+  PersonalizationSummary,
+  StoryResult,
+} from "../types.ts";
 import { parseModelJson } from "../services/parseModelJson.ts";
 import { wakeUpStorySchema } from "../services/openaiSchemas.ts";
 
@@ -7,6 +12,7 @@ interface GenerateStoryInput {
   city: CityMappingRecord;
   greeting: string;
   userName?: string;
+  personalization?: PersonalizationSummary;
 }
 
 export async function generateStory(input: GenerateStoryInput): Promise<StoryResult> {
@@ -16,13 +22,22 @@ export async function generateStory(input: GenerateStoryInput): Promise<StoryRes
       `Selected city: ${input.city.city}, ${input.city.country}`,
       `Greeting to weave in: ${input.greeting}`,
       `User name: ${input.userName ?? "Traveler"}`,
+      ...(input.personalization
+        ? [
+            `Recent patterns to consider: ${input.personalization.recentPatterns.join("; ") || "None"}`,
+            `Stable preferences to preserve lightly: ${input.personalization.stablePreferences.join("; ") || "None"}`,
+            ...input.personalization.avoidRepeats.map((item) => `Avoid repeating ${item}`),
+            `Confidence notes: ${input.personalization.confidenceNotes}`,
+          ]
+        : []),
       `The English story must begin exactly with: "Today you wake up in ${input.city.city}, ${input.city.country}."`,
       `The Traditional Chinese story must begin exactly with: "今天的你甦醒在${input.city.countryZh}的${input.city.cityZh}。"`,
       "Include local cultural habits, geography, and one lesser-known historical detail.",
       "Keep the English story under 150 words.",
       "Keep the Traditional Chinese story under 150 Chinese characters.",
       "Avoid stereotypes and invented facts.",
-      "Return JSON with keys story and storyZh.",
+      "Also return a short tone label and 2 to 4 motifs that describe the morning.",
+      "Return JSON with keys story, storyZh, tone, motifs.",
     ].join("\n"),
     responseFormat: {
       type: "json_schema",

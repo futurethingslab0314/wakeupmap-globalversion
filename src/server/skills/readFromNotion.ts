@@ -1,8 +1,10 @@
 import type { NormalizedNotionRecord, NotionClient } from "../types";
 import {
   getDateProperty,
+  getMultiSelectProperty,
   getNumberProperty,
   getRichTextProperty,
+  getSelectProperty,
   getTitleProperty,
   getUrlProperty,
 } from "../services/notion";
@@ -29,6 +31,7 @@ function normalizeRecord(page: unknown): NormalizedNotionRecord {
 
   return {
     id: "id" in pageObject && typeof pageObject.id === "string" ? pageObject.id : "",
+    userName: getTitleProperty(properties, "User Name") || getTitleProperty(properties, "Name"),
     city,
     cityZh,
     city_zh: cityZh,
@@ -40,6 +43,18 @@ function normalizeRecord(page: unknown): NormalizedNotionRecord {
     storyZh,
     story_zh: storyZh,
     recipe: getRichTextProperty(properties, "Recipe"),
+    breakfastName: getRichTextProperty(properties, "Breakfast Name"),
+    breakfastNameZh: getRichTextProperty(properties, "Breakfast Name ZH"),
+    breakfastDescription: getRichTextProperty(properties, "Breakfast Description"),
+    breakfastDescriptionZh: getRichTextProperty(properties, "Breakfast Description ZH"),
+    highlightIngredients: getRichTextProperty(properties, "Highlight Ingredients"),
+    imagePrompt: getRichTextProperty(properties, "Image Prompt"),
+    tone: getSelectProperty(properties, "Tone"),
+    motifs: getMultiSelectProperty(properties, "Motifs"),
+    breakfastCategory: getSelectProperty(properties, "Breakfast Category"),
+    sceneSetting: getSelectProperty(properties, "Scene Setting"),
+    visualAnchors: getMultiSelectProperty(properties, "Visual Anchors"),
+    avoidRepeats: getRichTextProperty(properties, "Avoid Repeats"),
     imageUrl: getUrlProperty(properties, "Image URL"),
     latitude: getNumberProperty(properties, "Latitude"),
     longitude: getNumberProperty(properties, "Longitude"),

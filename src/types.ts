@@ -29,6 +29,15 @@ export interface WakeUpImageJob {
   country: string;
   countryZh?: string;
   recordedAtIso: string;
+  breakfastName?: string;
+  breakfastNameZh?: string;
+  breakfastDescription?: string;
+  breakfastDescriptionZh?: string;
+  highlightIngredients?: string[];
+  breakfastCategory?: string;
+  sceneSetting?: string;
+  visualAnchors?: string[];
+  avoidRepeats?: string[];
 }
 
 export interface WakeUpNowResponse {

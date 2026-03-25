@@ -1,10 +1,18 @@
-import type { BreakfastConcept, CityMappingRecord, OpenAIClient } from "../types.ts";
+import type {
+  BreakfastConcept,
+  CityMappingRecord,
+  OpenAIClient,
+  PersonalizationSummary,
+  StoryResult,
+} from "../types.ts";
 import { parseModelJson } from "../services/parseModelJson.ts";
 import { localBreakfastSchema } from "../services/openaiSchemas.ts";
 
 interface GenerateLocalBreakfastInput {
   openai: Pick<OpenAIClient, "generateText">;
   city: CityMappingRecord;
+  story?: StoryResult;
+  personalization?: PersonalizationSummary;
 }
 
 export async function generateLocalBreakfast(
@@ -15,8 +23,25 @@ export async function generateLocalBreakfast(
     userPrompt: [
       `City: ${input.city.city}, ${input.city.country}`,
       `Language code: ${input.city.languageCode}`,
-      "Return JSON with name, nameZh, description, descriptionZh, highlightIngredients.",
+      ...(input.story
+        ? [
+            `Story tone: ${input.story.tone}`,
+            `Story motifs: ${input.story.motifs.join(", ")}`,
+          ]
+        : []),
+      ...(input.personalization
+        ? [
+            `Recent patterns to consider: ${input.personalization.recentPatterns.join("; ") || "None"}`,
+            `Stable preferences to preserve lightly: ${input.personalization.stablePreferences.join("; ") || "None"}`,
+            ...input.personalization.avoidRepeats,
+          ]
+        : []),
+      "Choose one breakfast that feels like the same morning as the story.",
+      "Prioritize city-level breakfast culture, serving context, and plausible tableware or packaging.",
+      "Return JSON with name, nameZh, description, descriptionZh, highlightIngredients, breakfastCategory, sceneSetting, visualAnchors, avoidRepeats.",
       "highlightIngredients must be an array of short canonical ingredient names.",
+      "visualAnchors must be an array of concrete city-grounded serving or tableware cues.",
+      "avoidRepeats must be an array of brief repetition-control notes.",
     ].join("\n"),
     responseFormat: {
       type: "json_schema",

@@ -1,4 +1,6 @@
 import { locations } from "../../data";
+import { createNotionClient } from "../services/notion";
+import { readFromNotion } from "../skills/readFromNotion";
 
 interface RequestLike {
   method?: string;
@@ -19,17 +21,34 @@ export function createNotionDataHandler(dependencies: NotionDataHandlerDependenc
     request: RequestLike,
     response: ResponseLike,
   ): Promise<void> {
-    if (request.method && request.method !== "GET") {
-      response.setHeader?.("Allow", "GET");
-      response.status(405).json({ error: "Method Not Allowed" });
-      return;
-    }
+    try {
+      if (request.method && request.method !== "GET") {
+        response.setHeader?.("Allow", "GET");
+        response.status(405).json({ error: "Method Not Allowed" });
+        return;
+      }
 
-    const records = await dependencies.loadRecords();
-    response.status(200).json(records.length > 0 ? records : locations);
+      const records = await dependencies.loadRecords();
+      response.status(200).json(records.length > 0 ? records : locations);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      response.status(500).json({ error: message });
+    }
   };
 }
 
 export const handleNotionDataRequest = createNotionDataHandler({
-  loadRecords: async () => locations,
+  loadRecords: async () => {
+    const notionApiKey = process.env.NOTION_API_KEY;
+    const databaseId = process.env.NOTION_DATABASE_ID;
+
+    if (!notionApiKey || !databaseId) {
+      return locations;
+    }
+
+    return readFromNotion({
+      notion: createNotionClient({ apiKey: notionApiKey }),
+      databaseId,
+    });
+  },
 });

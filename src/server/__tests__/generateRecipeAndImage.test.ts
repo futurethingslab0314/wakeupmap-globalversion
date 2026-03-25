@@ -11,6 +11,10 @@ const breakfastConcept: BreakfastConcept = {
   description: "A classic Taiwanese breakfast pairing.",
   descriptionZh: "經典台式早餐組合。",
   highlightIngredients: ["soy milk", "youtiao", "scallion"],
+  breakfastCategory: "street breakfast set",
+  sceneSetting: "street-side breakfast counter in Taipei",
+  visualAnchors: ["metal soy milk pot", "paper cup", "narrow breakfast shop counter"],
+  avoidRepeats: ["avoid cafe-table plating"],
 };
 
 test("generateRecipe creates a practical bilingual single-serving recipe with matched image prompt", async () => {
@@ -50,6 +54,8 @@ test("generateRecipe creates a practical bilingual single-serving recipe with ma
   assert.match(requests[0].userPrompt, /soy milk, youtiao, scallion/);
   assert.match(requests[0].userPrompt, /single-serving/i);
   assert.match(requests[0].userPrompt, /image prompt/i);
+  assert.match(requests[0].userPrompt, /street-side breakfast counter in Taipei/i);
+  assert.match(requests[0].userPrompt, /metal soy milk pot, paper cup, narrow breakfast shop counter/i);
   assert.equal(requests[0].responseFormat?.type, "json_schema");
   assert.equal(requests[0].responseFormat?.name, "breakfast_recipe");
 });
@@ -92,6 +98,9 @@ test("generateBreakfastImage produces a constrained OpenAI image prompt consiste
       recipeZh: "食材：豆漿 240 毫升、油條 1 根、蔥花 1 大匙。步驟：加熱豆漿，切好油條，一起上桌。總時長：10 分鐘。",
       highlightIngredients: ["soy milk", "youtiao", "scallion"],
       imagePrompt: "Top-down photo of a single-person Taipei breakfast with soy milk, youtiao, and scallion on a simple table.",
+      breakfastCategory: "street breakfast set",
+      sceneSetting: "street-side breakfast counter in Taipei",
+      visualAnchors: ["metal soy milk pot", "paper cup", "narrow breakfast shop counter"],
     },
   });
 
@@ -107,5 +116,9 @@ test("generateBreakfastImage produces a constrained OpenAI image prompt consiste
   assert.match(result.prompt, /soy milk/i);
   assert.match(result.prompt, /youtiao/i);
   assert.match(result.prompt, /Taiwan/i);
+  assert.match(result.prompt, /street-side breakfast counter in Taipei/i);
+  assert.match(result.prompt, /metal soy milk pot/i);
+  assert.match(result.prompt, /paper cup/i);
+  assert.match(result.prompt, /avoid generic brunch/i);
   assert.equal(requests[0].prompt, result.prompt);
 });

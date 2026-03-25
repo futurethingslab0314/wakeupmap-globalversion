@@ -4,8 +4,13 @@ export const wakeUpStorySchema = {
   properties: {
     story: { type: "string" },
     storyZh: { type: "string" },
+    tone: { type: "string" },
+    motifs: {
+      type: "array",
+      items: { type: "string" },
+    },
   },
-  required: ["story", "storyZh"],
+  required: ["story", "storyZh", "tone", "motifs"],
 } as const;
 
 export const localBreakfastSchema = {
@@ -20,8 +25,28 @@ export const localBreakfastSchema = {
       type: "array",
       items: { type: "string" },
     },
+    breakfastCategory: { type: "string" },
+    sceneSetting: { type: "string" },
+    visualAnchors: {
+      type: "array",
+      items: { type: "string" },
+    },
+    avoidRepeats: {
+      type: "array",
+      items: { type: "string" },
+    },
   },
-  required: ["name", "nameZh", "description", "descriptionZh", "highlightIngredients"],
+  required: [
+    "name",
+    "nameZh",
+    "description",
+    "descriptionZh",
+    "highlightIngredients",
+    "breakfastCategory",
+    "sceneSetting",
+    "visualAnchors",
+    "avoidRepeats",
+  ],
 } as const;
 
 export const breakfastRecipeSchema = {
@@ -37,6 +62,22 @@ export const breakfastRecipeSchema = {
       items: { type: "string" },
     },
     imagePrompt: { type: "string" },
+    breakfastCategory: { type: "string" },
+    sceneSetting: { type: "string" },
+    visualAnchors: {
+      type: "array",
+      items: { type: "string" },
+    },
   },
-  required: ["title", "titleZh", "recipe", "recipeZh", "highlightIngredients", "imagePrompt"],
+  required: [
+    "title",
+    "titleZh",
+    "recipe",
+    "recipeZh",
+    "highlightIngredients",
+    "imagePrompt",
+    "breakfastCategory",
+    "sceneSetting",
+    "visualAnchors",
+  ],
 } as const;

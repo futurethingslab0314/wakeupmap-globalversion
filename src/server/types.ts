@@ -24,7 +24,26 @@ export interface WakeUpNowRequest {
 
 export interface WakeUpNowResult {
   record: NormalizedNotionRecord;
+  imageJob?: WakeUpImageJob;
   imageStorageKey?: string;
+}
+
+export interface WakeUpImageJob {
+  pageId: string;
+  city: string;
+  cityZh?: string;
+  country: string;
+  countryZh?: string;
+  recordedAtIso: string;
+  breakfastName?: string;
+  breakfastNameZh?: string;
+  breakfastDescription?: string;
+  breakfastDescriptionZh?: string;
+  highlightIngredients?: string[];
+  breakfastCategory?: string;
+  sceneSetting?: string;
+  visualAnchors?: string[];
+  avoidRepeats?: string[];
 }
 
 export interface SelectCityInput {
@@ -42,6 +61,7 @@ export interface SelectCityResult {
 
 export interface NormalizedNotionRecord {
   id: string;
+  userName?: string;
   city: string;
   cityZh: string;
   city_zh?: string;
@@ -55,6 +75,18 @@ export interface NormalizedNotionRecord {
   story_zh?: string;
   recipe: string;
   recipeZh?: string;
+  breakfastName?: string;
+  breakfastNameZh?: string;
+  breakfastDescription?: string;
+  breakfastDescriptionZh?: string;
+  highlightIngredients?: string;
+  imagePrompt?: string;
+  tone?: string;
+  motifs?: string[];
+  breakfastCategory?: string;
+  sceneSetting?: string;
+  visualAnchors?: string[];
+  avoidRepeats?: string;
   imageUrl: string;
   latitude: number;
   longitude: number;
@@ -93,6 +125,8 @@ export interface OpenAIClient {
 export interface StoryResult {
   story: string;
   storyZh: string;
+  tone: string;
+  motifs: string[];
 }
 
 export interface BreakfastConcept {
@@ -101,6 +135,10 @@ export interface BreakfastConcept {
   description: string;
   descriptionZh: string;
   highlightIngredients: string[];
+  breakfastCategory: string;
+  sceneSetting: string;
+  visualAnchors: string[];
+  avoidRepeats: string[];
 }
 
 export interface RecipeResult {
@@ -110,6 +148,16 @@ export interface RecipeResult {
   recipeZh?: string;
   highlightIngredients: string[];
   imagePrompt?: string;
+  breakfastCategory?: string;
+  sceneSetting?: string;
+  visualAnchors?: string[];
+}
+
+export interface PersonalizationSummary {
+  recentPatterns: string[];
+  stablePreferences: string[];
+  avoidRepeats: string[];
+  confidenceNotes: string;
 }
 
 export interface NotionQueryResult {
@@ -123,6 +171,8 @@ export interface NotionCreatePageRequest {
 export interface NotionClient {
   queryDatabase(databaseId: string): Promise<NotionQueryResult>;
   createPage(databaseId: string, request: NotionCreatePageRequest): Promise<unknown>;
+  getDatabase(databaseId: string): Promise<{ properties: Record<string, { type?: string; name?: string }> }>;
+  updatePage(pageId: string, request: { properties: Record<string, unknown> }): Promise<unknown>;
 }
 
 export interface R2UploadRequest {
