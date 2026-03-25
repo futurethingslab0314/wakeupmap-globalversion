@@ -28,6 +28,8 @@ function normalizeRecord(page: unknown): NormalizedNotionRecord {
   const story = getRichTextProperty(properties, "Story");
   const storyZh = getRichTextProperty(properties, "Story ZH") || story;
   const recordedAtDate = getDateProperty(properties, "Recorded At");
+  const motifsText = getRichTextProperty(properties, "Motifs");
+  const visualAnchorsText = getRichTextProperty(properties, "Visual Anchors");
 
   return {
     id: "id" in pageObject && typeof pageObject.id === "string" ? pageObject.id : "",
@@ -49,11 +51,17 @@ function normalizeRecord(page: unknown): NormalizedNotionRecord {
     breakfastDescriptionZh: getRichTextProperty(properties, "Breakfast Description ZH"),
     highlightIngredients: getRichTextProperty(properties, "Highlight Ingredients"),
     imagePrompt: getRichTextProperty(properties, "Image Prompt"),
-    tone: getSelectProperty(properties, "Tone"),
-    motifs: getMultiSelectProperty(properties, "Motifs"),
-    breakfastCategory: getSelectProperty(properties, "Breakfast Category"),
-    sceneSetting: getSelectProperty(properties, "Scene Setting"),
-    visualAnchors: getMultiSelectProperty(properties, "Visual Anchors"),
+    tone: getRichTextProperty(properties, "Tone") || getSelectProperty(properties, "Tone"),
+    motifs: motifsText
+      ? motifsText.split(",").map((value) => value.trim()).filter(Boolean)
+      : getMultiSelectProperty(properties, "Motifs"),
+    breakfastCategory:
+      getRichTextProperty(properties, "Breakfast Category") || getSelectProperty(properties, "Breakfast Category"),
+    sceneSetting:
+      getRichTextProperty(properties, "Scene Setting") || getSelectProperty(properties, "Scene Setting"),
+    visualAnchors: visualAnchorsText
+      ? visualAnchorsText.split(",").map((value) => value.trim()).filter(Boolean)
+      : getMultiSelectProperty(properties, "Visual Anchors"),
     avoidRepeats: getRichTextProperty(properties, "Avoid Repeats"),
     imageUrl: getUrlProperty(properties, "Image URL"),
     latitude: getNumberProperty(properties, "Latitude"),

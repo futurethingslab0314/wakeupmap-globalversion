@@ -38,6 +38,8 @@ export async function generateLocalBreakfast(
         : []),
       "Choose one breakfast that feels like the same morning as the story.",
       "Prioritize city-level breakfast culture, serving context, and plausible tableware or packaging.",
+      "Use short label-style values for breakfastCategory and sceneSetting, ideally 1 to 4 words.",
+      "Do not use commas in breakfastCategory, sceneSetting, motifs, or visualAnchors.",
       "Return JSON with name, nameZh, description, descriptionZh, highlightIngredients, breakfastCategory, sceneSetting, visualAnchors, avoidRepeats.",
       "highlightIngredients must be an array of short canonical ingredient names.",
       "visualAnchors must be an array of concrete city-grounded serving or tableware cues.",

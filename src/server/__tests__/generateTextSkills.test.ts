@@ -162,6 +162,8 @@ test("generateLocalBreakfast returns concept fields and canonical highlightIngre
   assert.match(requests[0].userPrompt, /story tone: observant/i);
   assert.match(requests[0].userPrompt, /morning scooters, steam, narrow lane/i);
   assert.match(requests[0].userPrompt, /Avoid cafe-table scenes/i);
+  assert.match(requests[0].userPrompt, /Use short label-style values for breakfastCategory and sceneSetting/i);
+  assert.match(requests[0].userPrompt, /Do not use commas in breakfastCategory, sceneSetting, motifs, or visualAnchors/i);
   assert.match(requests[0].userPrompt, /Return JSON with name, nameZh, description, descriptionZh, highlightIngredients, breakfastCategory, sceneSetting, visualAnchors, avoidRepeats\./i);
   assert.equal(requests[0].responseFormat?.type, "json_schema");
   assert.equal(requests[0].responseFormat?.name, "local_breakfast");

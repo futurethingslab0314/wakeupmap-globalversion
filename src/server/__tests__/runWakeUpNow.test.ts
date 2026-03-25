@@ -39,12 +39,12 @@ test("runWakeUpNow writes structured story and breakfast fields to Notion and re
             City: { type: "title", title: [{ plain_text: "Taipei" }] },
             Country: { type: "rich_text", rich_text: [{ plain_text: "Taiwan" }] },
             Story: { type: "rich_text", rich_text: [{ plain_text: "Old story" }] },
-            Tone: { type: "select", select: { name: "soft" } },
-            Motifs: { type: "multi_select", multi_select: [{ name: "steam" }] },
+            Tone: { type: "rich_text", rich_text: [{ plain_text: "soft" }] },
+            Motifs: { type: "rich_text", rich_text: [{ plain_text: "steam" }] },
             "Breakfast Name": { type: "rich_text", rich_text: [{ plain_text: "Soy Milk and Youtiao" }] },
-            "Breakfast Category": { type: "select", select: { name: "street breakfast set" } },
-            "Scene Setting": { type: "select", select: { name: "street-side breakfast counter" } },
-            "Visual Anchors": { type: "multi_select", multi_select: [{ name: "paper cup" }] },
+            "Breakfast Category": { type: "rich_text", rich_text: [{ plain_text: "street breakfast set" }] },
+            "Scene Setting": { type: "rich_text", rich_text: [{ plain_text: "street-side breakfast counter" }] },
+            "Visual Anchors": { type: "rich_text", rich_text: [{ plain_text: "paper cup" }] },
           },
         },
       ],
@@ -65,11 +65,11 @@ test("runWakeUpNow writes structured story and breakfast fields to Notion and re
         "Breakfast Description ZH": { type: "rich_text" },
         "Highlight Ingredients": { type: "rich_text" },
         "Image Prompt": { type: "rich_text" },
-        Tone: { type: "select" },
-        Motifs: { type: "multi_select" },
-        "Breakfast Category": { type: "select" },
-        "Scene Setting": { type: "select" },
-        "Visual Anchors": { type: "multi_select" },
+        Tone: { type: "rich_text" },
+        Motifs: { type: "rich_text" },
+        "Breakfast Category": { type: "rich_text" },
+        "Scene Setting": { type: "rich_text" },
+        "Visual Anchors": { type: "rich_text" },
         "Avoid Repeats": { type: "rich_text" },
         Recipe: { type: "rich_text" },
         "Recipe ZH": { type: "rich_text" },
@@ -150,15 +150,11 @@ test("runWakeUpNow writes structured story and breakfast fields to Notion and re
   assert.equal(properties["Breakfast Name ZH"].rich_text[0].text.content, "豆漿油條");
   assert.equal(properties["Breakfast Description"].rich_text[0].text.content, "A street-side Taipei breakfast set.");
   assert.equal(properties["Image Prompt"].rich_text[0].text.content, "");
-  assert.equal(properties["Tone"].select.name, "observant");
-  assert.deepEqual(properties["Motifs"].multi_select.map((item: { name: string }) => item.name), ["steam", "scooter lane"]);
-  assert.equal(properties["Breakfast Category"].select.name, "street breakfast set");
-  assert.equal(properties["Scene Setting"].select.name, "street-side breakfast counter");
-  assert.deepEqual(
-    properties["Visual Anchors"].multi_select.map((item: { name: string }) => item.name),
-    ["paper cup", "metal soy milk pot"],
-  );
+  assert.equal(properties["Tone"].rich_text[0].text.content, "observant");
+  assert.equal(properties["Motifs"].rich_text[0].text.content, "steam, scooter lane");
+  assert.equal(properties["Breakfast Category"].rich_text[0].text.content, "street breakfast set");
+  assert.equal(properties["Scene Setting"].rich_text[0].text.content, "street-side breakfast counter");
+  assert.equal(properties["Visual Anchors"].rich_text[0].text.content, "paper cup, metal soy milk pot");
   assert.equal(properties["Avoid Repeats"].rich_text[0].text.content, "avoid cafe-table plating");
   assert.match(textRequests.map((request) => request.userPrompt).join("\n"), /recent tone: soft/i);
 });
-

@@ -137,16 +137,14 @@ function asTitle(value: string) {
   };
 }
 
-function asSelect(value: string) {
-  return {
-    select: { name: value },
-  };
-}
-
-function asMultiSelect(values: string[]) {
-  return {
-    multi_select: values.filter(Boolean).map((value) => ({ name: value })),
-  };
+function sanitizeOptionName(value: string, maxLength = 60): string {
+  const primarySegment = value.split(",")[0] ?? value;
+  return primarySegment
+    .replace(/,/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength)
+    .trim();
 }
 
 interface BuildWakeUpPagePropertiesInput {
@@ -205,6 +203,11 @@ export function buildWakeUpPageProperties(
     [["breakfast description zh"], input.breakfastDescriptionZh],
     [["highlight ingredients"], input.highlightIngredients.join(", ")],
     [["image prompt"], input.imagePrompt],
+    [["tone"], sanitizeOptionName(input.tone)],
+    [["motifs"], input.motifs.map((value) => sanitizeOptionName(value, 40)).filter(Boolean).join(", ")],
+    [["breakfast category"], sanitizeOptionName(input.breakfastCategory)],
+    [["scene setting"], sanitizeOptionName(input.sceneSetting)],
+    [["visual anchors"], input.visualAnchors.map((value) => sanitizeOptionName(value, 40)).filter(Boolean).join(", ")],
     [["avoid repeats"], input.avoidRepeats.join("; ")],
     [["recipe"], input.recipe],
     [["recipe zh", "recipezh", "recipe_zh"], input.recipeZh],
@@ -215,31 +218,6 @@ export function buildWakeUpPageProperties(
     const propertyName = findPropertyName(schema, "rich_text", aliases);
     if (propertyName) {
       properties[propertyName] = asRichText(value);
-    }
-  }
-
-  const selectMappings: Array<[string[], string]> = [
-    [["tone"], input.tone],
-    [["breakfast category"], input.breakfastCategory],
-    [["scene setting"], input.sceneSetting],
-  ];
-
-  for (const [aliases, value] of selectMappings) {
-    const propertyName = findPropertyName(schema, "select", aliases);
-    if (propertyName && value) {
-      properties[propertyName] = asSelect(value);
-    }
-  }
-
-  const multiSelectMappings: Array<[string[], string[]]> = [
-    [["motifs"], input.motifs],
-    [["visual anchors"], input.visualAnchors],
-  ];
-
-  for (const [aliases, values] of multiSelectMappings) {
-    const propertyName = findPropertyName(schema, "multi_select", aliases);
-    if (propertyName) {
-      properties[propertyName] = asMultiSelect(values);
     }
   }
 

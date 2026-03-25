@@ -192,6 +192,20 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+function sanitizeOptionName(value: string, maxLength = 60): string {
+  const primarySegment = value.split(",")[0] ?? value;
+  return primarySegment
+    .replace(/,/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength)
+    .trim();
+}
+
+function sanitizeMultiSelectValues(values: string[], maxLength = 40): string[] {
+  return values.map((value) => sanitizeOptionName(value, maxLength)).filter(Boolean);
+}
+
 function getPlainText(value: unknown): string {
   if (!Array.isArray(value)) {
     return "";
@@ -607,6 +621,8 @@ async function generateBreakfastConcept(city: WorldCity) {
         `City: ${city.city}, ${city.country}`,
         `City (Traditional Chinese): ${city.cityZh}, ${city.countryZh}`,
         "Prioritize city-level breakfast culture, serving context, and plausible tableware or packaging.",
+        "Use short label-style values for breakfastCategory and sceneSetting, ideally 1 to 4 words.",
+        "Do not use commas in breakfastCategory, sceneSetting, motifs, or visualAnchors.",
         "Return JSON with name, nameZh, description, descriptionZh, highlightIngredients, breakfastCategory, sceneSetting, visualAnchors, avoidRepeats.",
         "highlightIngredients must be an array of short canonical ingredient names.",
         "visualAnchors must be an array of concrete city-grounded serving or tableware cues.",
@@ -902,38 +918,38 @@ function buildNotionProperties(
     }
   }
 
-  const toneName = findPropertyName(schema, "select", ["tone"]);
+  const toneName = findPropertyName(schema, "rich_text", ["tone"]);
   if (toneName && record.tone) {
     properties[toneName] = {
-      select: { name: record.tone },
+      rich_text: [{ text: { content: sanitizeOptionName(record.tone) } }],
     };
   }
 
-  const breakfastCategoryName = findPropertyName(schema, "select", ["breakfast category"]);
+  const breakfastCategoryName = findPropertyName(schema, "rich_text", ["breakfast category"]);
   if (breakfastCategoryName && record.breakfastCategory) {
     properties[breakfastCategoryName] = {
-      select: { name: record.breakfastCategory },
+      rich_text: [{ text: { content: sanitizeOptionName(record.breakfastCategory) } }],
     };
   }
 
-  const sceneSettingName = findPropertyName(schema, "select", ["scene setting"]);
+  const sceneSettingName = findPropertyName(schema, "rich_text", ["scene setting"]);
   if (sceneSettingName && record.sceneSetting) {
     properties[sceneSettingName] = {
-      select: { name: record.sceneSetting },
+      rich_text: [{ text: { content: sanitizeOptionName(record.sceneSetting) } }],
     };
   }
 
-  const motifsName = findPropertyName(schema, "multi_select", ["motifs"]);
+  const motifsName = findPropertyName(schema, "rich_text", ["motifs"]);
   if (motifsName) {
     properties[motifsName] = {
-      multi_select: record.motifs.map((value) => ({ name: value })),
+      rich_text: [{ text: { content: sanitizeMultiSelectValues(record.motifs).join(", ") } }],
     };
   }
 
-  const visualAnchorsName = findPropertyName(schema, "multi_select", ["visual anchors"]);
+  const visualAnchorsName = findPropertyName(schema, "rich_text", ["visual anchors"]);
   if (visualAnchorsName) {
     properties[visualAnchorsName] = {
-      multi_select: record.visualAnchors.map((value) => ({ name: value })),
+      rich_text: [{ text: { content: sanitizeMultiSelectValues(record.visualAnchors).join(", ") } }],
     };
   }
 
