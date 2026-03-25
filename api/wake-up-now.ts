@@ -62,6 +62,9 @@ type RecipeResult = {
   recipeZh: string;
   highlightIngredients: string[];
   imagePrompt: string;
+  breakfastCategory?: string;
+  sceneSetting?: string;
+  visualAnchors?: string[];
 };
 
 type StructuredResponseFormat = {
@@ -87,8 +90,13 @@ const wakeUpStorySchema = {
   properties: {
     story: { type: "string" },
     storyZh: { type: "string" },
+    tone: { type: "string" },
+    motifs: {
+      type: "array",
+      items: { type: "string" },
+    },
   },
-  required: ["story", "storyZh"],
+  required: ["story", "storyZh", "tone", "motifs"],
 } as const;
 
 const localBreakfastSchema = {
@@ -103,8 +111,28 @@ const localBreakfastSchema = {
       type: "array",
       items: { type: "string" },
     },
+    breakfastCategory: { type: "string" },
+    sceneSetting: { type: "string" },
+    visualAnchors: {
+      type: "array",
+      items: { type: "string" },
+    },
+    avoidRepeats: {
+      type: "array",
+      items: { type: "string" },
+    },
   },
-  required: ["name", "nameZh", "description", "descriptionZh", "highlightIngredients"],
+  required: [
+    "name",
+    "nameZh",
+    "description",
+    "descriptionZh",
+    "highlightIngredients",
+    "breakfastCategory",
+    "sceneSetting",
+    "visualAnchors",
+    "avoidRepeats",
+  ],
 } as const;
 
 const breakfastRecipeSchema = {
@@ -120,8 +148,24 @@ const breakfastRecipeSchema = {
       items: { type: "string" },
     },
     imagePrompt: { type: "string" },
+    breakfastCategory: { type: "string" },
+    sceneSetting: { type: "string" },
+    visualAnchors: {
+      type: "array",
+      items: { type: "string" },
+    },
   },
-  required: ["title", "titleZh", "recipe", "recipeZh", "highlightIngredients", "imagePrompt"],
+  required: [
+    "title",
+    "titleZh",
+    "recipe",
+    "recipeZh",
+    "highlightIngredients",
+    "imagePrompt",
+    "breakfastCategory",
+    "sceneSetting",
+    "visualAnchors",
+  ],
 } as const;
 
 const locationZhNamesSchema = {
@@ -518,7 +562,7 @@ async function generateGreeting(city: WorldCity): Promise<string> {
 }
 
 async function generateStory(city: WorldCity, greeting: string, userName: string) {
-  return parseModelJson<{ story: string; storyZh: string }>(
+  return parseModelJson<{ story: string; storyZh: string; tone: string; motifs: string[] }>(
     await callOpenAIText(
       [
         "Create a grounded bilingual wake-up vignette as JSON.",
@@ -531,7 +575,8 @@ async function generateStory(city: WorldCity, greeting: string, userName: string
         "Keep the English story under 150 words.",
         "Keep the Traditional Chinese story under 150 Chinese characters.",
         "Avoid stereotypes and invented facts.",
-        "Return JSON with keys story and storyZh.",
+        "Also return a short tone label and 2 to 4 motifs that describe the morning.",
+        "Return JSON with keys story, storyZh, tone, motifs.",
       ].join("\n"),
       {
         type: "json_schema",
@@ -551,14 +596,21 @@ async function generateBreakfastConcept(city: WorldCity) {
     description: string;
     descriptionZh: string;
     highlightIngredients: string[];
+    breakfastCategory: string;
+    sceneSetting: string;
+    visualAnchors: string[];
+    avoidRepeats: string[];
   }>(
     await callOpenAIText(
       [
         "Recommend one iconic local breakfast and return it as JSON.",
         `City: ${city.city}, ${city.country}`,
         `City (Traditional Chinese): ${city.cityZh}, ${city.countryZh}`,
-        "Return JSON with name, nameZh, description, descriptionZh, highlightIngredients.",
+        "Prioritize city-level breakfast culture, serving context, and plausible tableware or packaging.",
+        "Return JSON with name, nameZh, description, descriptionZh, highlightIngredients, breakfastCategory, sceneSetting, visualAnchors, avoidRepeats.",
         "highlightIngredients must be an array of short canonical ingredient names.",
+        "visualAnchors must be an array of concrete city-grounded serving or tableware cues.",
+        "avoidRepeats must be an array of brief repetition-control notes.",
       ].join("\n"),
       {
         type: "json_schema",
@@ -583,11 +635,14 @@ async function generateRecipe(city: WorldCity, breakfastConcept: Awaited<ReturnT
         `Description: ${breakfastConcept.description}`,
         `Description (Traditional Chinese): ${breakfastConcept.descriptionZh}`,
         `Highlight ingredients: ${breakfastConcept.highlightIngredients.join(", ")}`,
+        `Breakfast category: ${breakfastConcept.breakfastCategory}`,
+        `Scene setting: ${breakfastConcept.sceneSetting}`,
+        `Visual anchors: ${breakfastConcept.visualAnchors.join(", ")}`,
         "Generate a practical single-serving breakfast recipe inspired by this city and country.",
         "The recipe must include ingredients with quantities, steps, and total time.",
         "Return bilingual content that stays consistent with the same ingredients in English and Traditional Chinese.",
-        "Also return an image prompt that matches exactly the same ingredients and plating style.",
-        "Return JSON with title, titleZh, recipe, recipeZh, highlightIngredients, imagePrompt.",
+        "Also return an image prompt that matches exactly the same ingredients, scene setting, and plating style.",
+        "Return JSON with title, titleZh, recipe, recipeZh, highlightIngredients, imagePrompt, breakfastCategory, sceneSetting, visualAnchors.",
       ].join("\n"),
       {
         type: "json_schema",
@@ -784,6 +839,18 @@ function buildNotionProperties(
     greeting: string;
     story: string;
     storyZh: string;
+    tone: string;
+    motifs: string[];
+    breakfastName: string;
+    breakfastNameZh: string;
+    breakfastDescription: string;
+    breakfastDescriptionZh: string;
+    highlightIngredients: string[];
+    imagePrompt: string;
+    breakfastCategory: string;
+    sceneSetting: string;
+    visualAnchors: string[];
+    avoidRepeats: string[];
     recipe: string;
     recipeZh: string;
     imageUrl: string;
@@ -813,6 +880,13 @@ function buildNotionProperties(
     [["greeting"], record.greeting],
     [["story"], record.story],
     [["story zh", "storyzh", "story_zh"], record.storyZh],
+    [["breakfast name"], record.breakfastName],
+    [["breakfast name zh"], record.breakfastNameZh],
+    [["breakfast description"], record.breakfastDescription],
+    [["breakfast description zh"], record.breakfastDescriptionZh],
+    [["highlight ingredients"], record.highlightIngredients.join(", ")],
+    [["image prompt"], record.imagePrompt],
+    [["avoid repeats"], record.avoidRepeats.join("; ")],
     [["recipe"], record.recipe],
     [["recipe zh", "recipezh", "recipe_zh"], record.recipeZh],
     [["timezone"], record.timezone],
@@ -826,6 +900,41 @@ function buildNotionProperties(
         rich_text: [{ text: { content: value } }],
       };
     }
+  }
+
+  const toneName = findPropertyName(schema, "select", ["tone"]);
+  if (toneName && record.tone) {
+    properties[toneName] = {
+      select: { name: record.tone },
+    };
+  }
+
+  const breakfastCategoryName = findPropertyName(schema, "select", ["breakfast category"]);
+  if (breakfastCategoryName && record.breakfastCategory) {
+    properties[breakfastCategoryName] = {
+      select: { name: record.breakfastCategory },
+    };
+  }
+
+  const sceneSettingName = findPropertyName(schema, "select", ["scene setting"]);
+  if (sceneSettingName && record.sceneSetting) {
+    properties[sceneSettingName] = {
+      select: { name: record.sceneSetting },
+    };
+  }
+
+  const motifsName = findPropertyName(schema, "multi_select", ["motifs"]);
+  if (motifsName) {
+    properties[motifsName] = {
+      multi_select: record.motifs.map((value) => ({ name: value })),
+    };
+  }
+
+  const visualAnchorsName = findPropertyName(schema, "multi_select", ["visual anchors"]);
+  if (visualAnchorsName) {
+    properties[visualAnchorsName] = {
+      multi_select: record.visualAnchors.map((value) => ({ name: value })),
+    };
   }
 
   const numberMappings: Array<[string[], number]> = [
@@ -907,6 +1016,7 @@ export default async function handler(
     const city = await localizeLocationNames(selectedCity);
     const greeting = await generateGreeting(city);
     const story = await generateStory(city, greeting, context.userName);
+    const breakfastConcept = await generateBreakfastConcept(city);
     const createPageResponse = await fetch("https://api.notion.com/v1/pages", {
       method: "POST",
       headers: {
@@ -925,6 +1035,18 @@ export default async function handler(
           greeting,
           story: story.story,
           storyZh: story.storyZh,
+          tone: story.tone,
+          motifs: story.motifs,
+          breakfastName: breakfastConcept.name,
+          breakfastNameZh: breakfastConcept.nameZh,
+          breakfastDescription: breakfastConcept.description,
+          breakfastDescriptionZh: breakfastConcept.descriptionZh,
+          highlightIngredients: breakfastConcept.highlightIngredients,
+          imagePrompt: "",
+          breakfastCategory: breakfastConcept.breakfastCategory,
+          sceneSetting: breakfastConcept.sceneSetting,
+          visualAnchors: breakfastConcept.visualAnchors,
+          avoidRepeats: breakfastConcept.avoidRepeats,
           recipe: "",
           recipeZh: "",
           imageUrl: "",
@@ -960,6 +1082,18 @@ export default async function handler(
         story: story.story,
         storyZh: story.storyZh,
         story_zh: story.storyZh,
+        breakfastName: breakfastConcept.name,
+        breakfastNameZh: breakfastConcept.nameZh,
+        breakfastDescription: breakfastConcept.description,
+        breakfastDescriptionZh: breakfastConcept.descriptionZh,
+        highlightIngredients: breakfastConcept.highlightIngredients.join(", "),
+        imagePrompt: "",
+        tone: story.tone,
+        motifs: story.motifs,
+        breakfastCategory: breakfastConcept.breakfastCategory,
+        sceneSetting: breakfastConcept.sceneSetting,
+        visualAnchors: breakfastConcept.visualAnchors,
+        avoidRepeats: breakfastConcept.avoidRepeats.join("; "),
         recipe: "",
         recipeZh: "",
         recipe_zh: "",
@@ -978,6 +1112,15 @@ export default async function handler(
         country: city.country,
         countryZh: city.countryZh,
         recordedAtIso: context.recordedAtIso,
+        breakfastName: breakfastConcept.name,
+        breakfastNameZh: breakfastConcept.nameZh,
+        breakfastDescription: breakfastConcept.description,
+        breakfastDescriptionZh: breakfastConcept.descriptionZh,
+        highlightIngredients: breakfastConcept.highlightIngredients,
+        breakfastCategory: breakfastConcept.breakfastCategory,
+        sceneSetting: breakfastConcept.sceneSetting,
+        visualAnchors: breakfastConcept.visualAnchors,
+        avoidRepeats: breakfastConcept.avoidRepeats,
       },
     });
   } catch (error) {

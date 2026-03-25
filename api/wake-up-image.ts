@@ -7,6 +7,15 @@ type WakeUpImageBody = {
   country?: string;
   countryZh?: string;
   recordedAtIso?: string;
+  breakfastName?: string;
+  breakfastNameZh?: string;
+  breakfastDescription?: string;
+  breakfastDescriptionZh?: string;
+  highlightIngredients?: string[];
+  breakfastCategory?: string;
+  sceneSetting?: string;
+  visualAnchors?: string[];
+  avoidRepeats?: string[];
 };
 
 type NotionPropertyDefinition = {
@@ -37,6 +46,9 @@ type RecipeResult = {
   recipeZh: string;
   highlightIngredients: string[];
   imagePrompt: string;
+  breakfastCategory?: string;
+  sceneSetting?: string;
+  visualAnchors?: string[];
 };
 
 const localBreakfastSchema = {
@@ -68,8 +80,24 @@ const breakfastRecipeSchema = {
       items: { type: "string" },
     },
     imagePrompt: { type: "string" },
+    breakfastCategory: { type: "string" },
+    sceneSetting: { type: "string" },
+    visualAnchors: {
+      type: "array",
+      items: { type: "string" },
+    },
   },
-  required: ["title", "titleZh", "recipe", "recipeZh", "highlightIngredients", "imagePrompt"],
+  required: [
+    "title",
+    "titleZh",
+    "recipe",
+    "recipeZh",
+    "highlightIngredients",
+    "imagePrompt",
+    "breakfastCategory",
+    "sceneSetting",
+    "visualAnchors",
+  ],
 } as const;
 
 function normalizeKey(value: string): string {
@@ -217,11 +245,20 @@ async function generateRecipe(
         `Description: ${breakfastConcept.description}`,
         `Description (Traditional Chinese): ${breakfastConcept.descriptionZh}`,
         `Highlight ingredients: ${breakfastConcept.highlightIngredients.join(", ")}`,
+        ...("breakfastCategory" in breakfastConcept && breakfastConcept.breakfastCategory
+          ? [`Breakfast category: ${breakfastConcept.breakfastCategory}`]
+          : []),
+        ...("sceneSetting" in breakfastConcept && breakfastConcept.sceneSetting
+          ? [`Scene setting: ${breakfastConcept.sceneSetting}`]
+          : []),
+        ...("visualAnchors" in breakfastConcept && breakfastConcept.visualAnchors?.length
+          ? [`Visual anchors: ${breakfastConcept.visualAnchors.join(", ")}`]
+          : []),
         "Generate a practical single-serving breakfast recipe inspired by this city and country.",
         "The recipe must include ingredients with quantities, steps, and total time.",
         "Return bilingual content that stays consistent with the same ingredients in English and Traditional Chinese.",
-        "Also return an image prompt that matches exactly the same ingredients and plating style.",
-        "Return JSON with title, titleZh, recipe, recipeZh, highlightIngredients, imagePrompt.",
+        "Also return an image prompt that matches exactly the same ingredients, scene setting, and plating style.",
+        "Return JSON with title, titleZh, recipe, recipeZh, highlightIngredients, imagePrompt, breakfastCategory, sceneSetting, visualAnchors.",
       ].join("\n"),
       {
         type: "json_schema",
@@ -265,16 +302,28 @@ async function callOpenAIImage(prompt: string): Promise<Uint8Array> {
 function buildImagePrompt(
   city: string,
   country: string,
-  recipe: { title?: string; recipe?: string; highlightIngredients?: string[]; imagePrompt?: string },
+  recipe: {
+    title?: string;
+    recipe?: string;
+    highlightIngredients?: string[];
+    imagePrompt?: string;
+    breakfastCategory?: string;
+    sceneSetting?: string;
+    visualAnchors?: string[];
+  },
 ): string {
   if (recipe.imagePrompt?.trim()) {
     return [
       recipe.imagePrompt.trim(),
       `Inspired by authentic ${city}, ${country} food culture.`,
+      ...(recipe.sceneSetting ? [`Scene setting: ${recipe.sceneSetting}.`] : []),
+      ...(recipe.visualAnchors?.length ? [`Visual anchors: ${recipe.visualAnchors.join(", ")}.`] : []),
+      ...(recipe.breakfastCategory ? [`Breakfast category: ${recipe.breakfastCategory}.`] : []),
       "Fixed camera angle: top view.",
       "Single-person breakfast portion.",
       "Show only food, utensils, and tabletop.",
       "Natural light, realistic textures, editorial composition.",
+      "Avoid generic brunch styling, luxury hotel plating, and unrelated western props.",
       "No people, no humans, no hands, no text, no logo, no watermark.",
     ].join(" ");
   }
@@ -284,8 +333,12 @@ function buildImagePrompt(
     `Dish title: ${recipe.title ?? city}.`,
     `Must include these ingredients from recipe: ${(recipe.highlightIngredients ?? []).join(", ")}.`,
     `Match recipe plating style and portions: ${recipe.recipe ?? ""}`,
+    ...(recipe.sceneSetting ? [`Scene setting: ${recipe.sceneSetting}.`] : []),
+    ...(recipe.visualAnchors?.length ? [`Visual anchors: ${recipe.visualAnchors.join(", ")}.`] : []),
+    ...(recipe.breakfastCategory ? [`Breakfast category: ${recipe.breakfastCategory}.`] : []),
     "Show only food, utensils, and tabletop.",
     "Top view, single-person composition, natural light, realistic textures, editorial composition.",
+    "Avoid generic brunch styling, luxury hotel plating, and unrelated western props.",
     "No people, no humans, no hands, no text, no logo, no watermark.",
   ].join(" ");
 }
@@ -403,7 +456,7 @@ async function uploadToR2(cityName: string, recordedAtIso: string, imageBinary: 
 
 async function updateNotionBreakfastProperties(
   pageId: string,
-  payload: { recipe: string; recipeZh: string; imageUrl: string; imageStorageKey: string },
+  payload: { recipe: string; recipeZh: string; imagePrompt: string; imageUrl: string; imageStorageKey: string },
 ) {
   const notionApiKey = process.env.NOTION_API_KEY;
   if (!notionApiKey) {
@@ -444,6 +497,13 @@ async function updateNotionBreakfastProperties(
   const imageUrlName = findPropertyName(properties, "url", ["image url", "imageurl", "image"]);
   if (imageUrlName) {
     patchProperties[imageUrlName] = { url: payload.imageUrl };
+  }
+
+  const imagePromptName = findPropertyName(properties, "rich_text", ["image prompt"]);
+  if (imagePromptName) {
+    patchProperties[imagePromptName] = {
+      rich_text: [{ text: { content: payload.imagePrompt } }],
+    };
   }
 
   const imageStorageKeyName = findPropertyName(properties, "url", ["imagestoragekey", "image storage key"]);
@@ -488,12 +548,25 @@ export default async function handler(
 
     const localizedCity = body.cityZh || body.city;
     const localizedCountry = body.countryZh || body.country;
-    const breakfastConcept = await generateBreakfastConcept({
-      city: body.city,
-      cityZh: localizedCity,
-      country: body.country,
-      countryZh: localizedCountry,
-    });
+    const breakfastConcept =
+      body.breakfastName && body.breakfastNameZh && body.breakfastDescription && body.breakfastDescriptionZh
+        ? {
+            name: body.breakfastName,
+            nameZh: body.breakfastNameZh,
+            description: body.breakfastDescription,
+            descriptionZh: body.breakfastDescriptionZh,
+            highlightIngredients: body.highlightIngredients ?? [],
+            breakfastCategory: body.breakfastCategory ?? "",
+            sceneSetting: body.sceneSetting ?? "",
+            visualAnchors: body.visualAnchors ?? [],
+            avoidRepeats: body.avoidRepeats ?? [],
+          }
+        : await generateBreakfastConcept({
+            city: body.city,
+            cityZh: localizedCity,
+            country: body.country,
+            countryZh: localizedCountry,
+          });
     const recipe = await generateRecipe(
       {
         city: body.city,
@@ -509,6 +582,7 @@ export default async function handler(
     await updateNotionBreakfastProperties(body.pageId, {
       recipe: recipe.recipe,
       recipeZh: recipe.recipeZh,
+      imagePrompt,
       imageUrl: uploadedImage.imageUrl,
       imageStorageKey: uploadedImage.imageStorageKey,
     });
