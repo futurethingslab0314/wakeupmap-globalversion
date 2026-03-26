@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { X, Coffee, Globe2, Layers } from "lucide-react";
 import { COUNTRY_TO_CONTINENT } from "../constants/continents";
 import { isRecordPreparing } from "../recordSync";
+import { getCityVisitCount } from "../mapSelection";
 
 interface DetailsPanelProps {
   record: NotionRecord | null;
@@ -19,6 +20,14 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, group, r
   if (!record && !continent && !group) return null;
   const text = uiText[language];
   const isBreakfastPreparing = isRecordPreparing(record, language);
+  const cityVisitCount = React.useMemo(() => getCityVisitCount(records, record), [records, record]);
+  const visitCountLabel = React.useMemo(() => {
+    if (!record || cityVisitCount <= 0) {
+      return null;
+    }
+
+    return language === "zh" ? `第${cityVisitCount}次造訪` : `Visit #${cityVisitCount}`;
+  }, [cityVisitCount, language, record]);
 
   // Calculate continent stats if needed
   const continentStats = React.useMemo(() => {
@@ -74,6 +83,12 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, group, r
                     <span className="tabular-nums">
                       {record.latitude.toFixed(4)}°N, {record.longitude.toFixed(4)}°E
                     </span>
+                    {visitCountLabel ? (
+                      <>
+                        <span className="opacity-30">/</span>
+                        <span className="uppercase tracking-widest">{visitCountLabel}</span>
+                      </>
+                    ) : null}
                   </>
                 ) : (
                   <span className="uppercase tracking-widest">{continentStats?.name ?? continent}</span>

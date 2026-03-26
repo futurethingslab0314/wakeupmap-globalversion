@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 import {
   filterRecordsForUser,
+  getCityVisitCount,
+  getCityVisitMarkerRadius,
   getLatestRecord,
   getLatestRecordForUser,
   getLatestRecordsForDateByUser,
@@ -132,6 +134,59 @@ test("getWakeupGroupUserNames returns unique user names in newest-first order", 
   ]);
 
   assert.deepEqual(names, ["ANNIE", "YT", "Unknown"]);
+});
+
+test("getCityVisitCount returns the chronological visit number for the same city and country", () => {
+  const records = [
+    { ...createRecord("taipei-1", "2026-03-20", "YT", { recordedAt: "08:00:00", utcOffset: 8 }), city: "Taipei", country: "Taiwan", latitude: 25.033, longitude: 121.5654 },
+    { ...createRecord("tokyo-1", "2026-03-21", "YT", { recordedAt: "08:00:00", utcOffset: 9 }), city: "Tokyo", country: "Japan", latitude: 35.6762, longitude: 139.6503 },
+    { ...createRecord("taipei-2", "2026-03-22", "YT", { recordedAt: "08:00:00", utcOffset: 8 }), city: "Taipei", country: "Taiwan", latitude: 25.033, longitude: 121.5654 },
+    { ...createRecord("taipei-3", "2026-03-23", "YT", { recordedAt: "08:00:00", utcOffset: 8 }), city: "Taipei", country: "Taiwan", latitude: 25.033, longitude: 121.5654 },
+  ];
+
+  assert.equal(getCityVisitCount(records, records[0]), 1);
+  assert.equal(getCityVisitCount(records, records[2]), 2);
+  assert.equal(getCityVisitCount(records, records[3]), 3);
+  assert.equal(getCityVisitCount(records, records[1]), 1);
+});
+
+test("getCityVisitMarkerRadius grows with repeat visits and caps at the fourth visit tier", () => {
+  const records = [
+    { ...createRecord("taipei-1", "2026-03-20", "YT", { recordedAt: "08:00:00", utcOffset: 8 }), city: "Taipei", country: "Taiwan", latitude: 25.033, longitude: 121.5654 },
+    { ...createRecord("taipei-2", "2026-03-21", "YT", { recordedAt: "08:00:00", utcOffset: 8 }), city: "Taipei", country: "Taiwan", latitude: 25.033, longitude: 121.5654 },
+    { ...createRecord("taipei-3", "2026-03-22", "YT", { recordedAt: "08:00:00", utcOffset: 8 }), city: "Taipei", country: "Taiwan", latitude: 25.033, longitude: 121.5654 },
+    { ...createRecord("taipei-4", "2026-03-23", "YT", { recordedAt: "08:00:00", utcOffset: 8 }), city: "Taipei", country: "Taiwan", latitude: 25.033, longitude: 121.5654 },
+    { ...createRecord("taipei-5", "2026-03-24", "YT", { recordedAt: "08:00:00", utcOffset: 8 }), city: "Taipei", country: "Taiwan", latitude: 25.033, longitude: 121.5654 },
+  ];
+
+  assert.equal(getCityVisitMarkerRadius(records, records[0]), 2);
+  assert.equal(getCityVisitMarkerRadius(records, records[1]), 2.6);
+  assert.equal(getCityVisitMarkerRadius(records, records[2]), 3.1);
+  assert.equal(getCityVisitMarkerRadius(records, records[3]), 3.6);
+  assert.equal(getCityVisitMarkerRadius(records, records[4]), 3.6);
+});
+
+test("getCityVisitCount treats identical coordinates as the same place even if city labels differ", () => {
+  const firstVisit = {
+    ...createRecord("phoenix-1", "2026-03-20", "YT", { recordedAt: "08:00:00", utcOffset: -7 }),
+    city: "Phoenix",
+    city_zh: "鳳凰城",
+    country: "United States",
+    country_zh: "美國",
+    latitude: 33.3073,
+    longitude: -111.7224,
+  };
+  const secondVisit = {
+    ...createRecord("phoenix-2", "2026-03-22", "YT", { recordedAt: "08:00:00", utcOffset: -7 }),
+    city: "Ahwatukee Foothills",
+    city_zh: "阿瓦圖基山麓",
+    country: "USA",
+    country_zh: "美國",
+    latitude: 33.3073,
+    longitude: -111.7224,
+  };
+
+  assert.equal(getCityVisitCount([firstVisit, secondVisit], secondVisit), 2);
 });
 
 test("isMainView returns true only when no detail or journal panel is open", () => {

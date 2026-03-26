@@ -106,6 +106,59 @@ export function getLatestRecordsForDateByUser(records: NotionRecord[], targetDat
   return Array.from(latestByUser.values());
 }
 
+function isSameCityVisit(left: NotionRecord, right: NotionRecord): boolean {
+  return left.latitude === right.latitude && left.longitude === right.longitude;
+}
+
+export function getCityVisitCount(records: NotionRecord[], targetRecord: NotionRecord | null): number {
+  if (!targetRecord) {
+    return 0;
+  }
+
+  const sorted = [...records].sort((left, right) => {
+    const timeDelta = getRecordedAtTimestamp(left) - getRecordedAtTimestamp(right);
+    if (timeDelta !== 0) {
+      return timeDelta;
+    }
+
+    return left.id.localeCompare(right.id);
+  });
+
+  let visitCount = 0;
+
+  for (const record of sorted) {
+    if (!isSameCityVisit(record, targetRecord)) {
+      continue;
+    }
+
+    visitCount += 1;
+
+    if (record.id === targetRecord.id) {
+      return visitCount;
+    }
+  }
+
+  return 0;
+}
+
+export function getCityVisitMarkerRadius(records: NotionRecord[], targetRecord: NotionRecord | null): number {
+  const visitCount = getCityVisitCount(records, targetRecord);
+
+  if (visitCount >= 4) {
+    return 3.6;
+  }
+
+  if (visitCount === 3) {
+    return 3.1;
+  }
+
+  if (visitCount === 2) {
+    return 2.6;
+  }
+
+  return 2;
+}
+
 export function isMainView(state: ViewState): boolean {
   return !state.showDatabase && !state.selectedRecordId && !state.selectedContinent;
 }

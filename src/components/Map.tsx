@@ -9,7 +9,12 @@ import {
 } from "react-simple-maps";
 import { NotionRecord } from "../types";
 import { getRecordCity, UiLanguage } from "../i18n";
-import { getLatestRecord, getRecordsSortedByRecordedAt, getWakeupGroupUserNames } from "../mapSelection";
+import {
+  getCityVisitMarkerRadius,
+  getLatestRecord,
+  getRecordsSortedByRecordedAt,
+  getWakeupGroupUserNames,
+} from "../mapSelection";
 import { getMapOverlayScale, getStableSvgSize, normalizeViewportSize } from "../mapOverlayScale";
 import { getGreetingBubbleHitArea, getMarkerLabelHitArea, getWakeupBubbleHitArea } from "../mapHitTargets";
 import { motion } from "motion/react";
@@ -472,6 +477,12 @@ const Map: React.FC<MapProps> = ({
         {!isWakeupMode && records.map((record) => {
           const isSelected = focusedRecordId === record.id;
           const isHighlighted = highlightedIds.includes(record.id);
+          const baseMarkerRadius = getCityVisitMarkerRadius(records, record);
+          const markerRadius = isSelected
+            ? baseMarkerRadius + 0.5
+            : isHighlighted
+              ? baseMarkerRadius + 0.2
+              : baseMarkerRadius;
           const long = parseFloat(record.longitude as any);
           const lat = parseFloat(record.latitude as any);
           const cityLabel = getRecordCity(record, language);
@@ -499,7 +510,7 @@ const Map: React.FC<MapProps> = ({
               >
                 {/* Small Solid Black Dot Marker */}
                 <circle
-                  r={isSelected ? 3.5 : (isHighlighted ? 2.5 : 2)}
+                  r={markerRadius}
                   fill="#000"
                 />
                 
