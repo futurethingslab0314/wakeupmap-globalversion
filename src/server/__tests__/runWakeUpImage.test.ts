@@ -82,6 +82,9 @@ test("runWakeUpImage writes recipe and image fields back to the existing Notion 
   assert.match(textRequests[0].userPrompt, /street-side breakfast counter/i);
   assert.match(imageRequests[0].prompt, /paper cup/i);
   assert.match(imageRequests[0].prompt, /avoid generic brunch/i);
+  assert.match(imageRequests[0].prompt, /centered on the table/i);
+  assert.match(imageRequests[0].prompt, /90-degree overhead/i);
+  assert.match(imageRequests[0].prompt, /no angled shot/i);
   assert.equal(updatedPages[0].pageId, "page-123");
   const properties = updatedPages[0].request.properties as Record<string, any>;
   assert.equal(properties["Recipe"].rich_text[0].text.content, "Ingredients: soy milk, youtiao. Steps: serve warm. Total time: 10 minutes.");

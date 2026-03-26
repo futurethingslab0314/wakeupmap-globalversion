@@ -710,21 +710,25 @@ function buildImagePrompt(city: WorldCity, recipe: RecipeResult): string {
     return [
       recipe.imagePrompt.trim(),
       `Inspired by authentic ${city.city}, ${city.country} food culture.`,
-      "Fixed camera angle: top view.",
+      "Fixed camera angle: 90-degree overhead top view from directly above the table.",
+      "Keep the full breakfast set centered on the table in the middle of the frame.",
       "Single-person breakfast portion.",
       "Show only food, utensils, and tabletop.",
       "Natural light, realistic textures, editorial composition.",
+      "No angled shot, no 3/4 view, no side view, no extreme close-up crop.",
       "No people, no humans, no hands, no text, no logo, no watermark.",
     ].join(" ");
   }
 
   return [
-    `Top view editorial food photograph of a single-person breakfast set inspired by authentic ${city.city}, ${city.country} food culture.`,
+    `90-degree overhead top view editorial food photograph of a single-person breakfast set inspired by authentic ${city.city}, ${city.country} food culture.`,
     `Dish title: ${recipe.title}.`,
     `Must include these ingredients from recipe: ${recipe.highlightIngredients.join(", ")}.`,
     `Match recipe plating style and portions: ${recipe.recipe}`,
+    "Keep the full breakfast set centered on the table in the middle of the frame.",
     "Show only food, utensils, and tabletop.",
-    "Top view, single-person composition, natural light, realistic textures, editorial composition.",
+    "90-degree overhead top view, centered on the table, single-person composition, natural light, realistic textures, editorial composition.",
+    "No angled shot, no 3/4 view, no side view, no extreme close-up crop.",
     "No people, no humans, no hands, no text, no logo, no watermark.",
   ].join(" ");
 }

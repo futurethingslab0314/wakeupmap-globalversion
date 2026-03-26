@@ -106,6 +106,8 @@ test("generateBreakfastImage produces a constrained OpenAI image prompt consiste
 
   assert.deepEqual(result.imageBinary, new Uint8Array([1, 2, 3]));
   assert.match(result.prompt, /top view/i);
+  assert.match(result.prompt, /centered on the table/i);
+  assert.match(result.prompt, /90-degree overhead/i);
   assert.match(result.prompt, /single-person/i);
   assert.match(result.prompt, /no people/i);
   assert.match(result.prompt, /no hands/i);
@@ -120,5 +122,7 @@ test("generateBreakfastImage produces a constrained OpenAI image prompt consiste
   assert.match(result.prompt, /metal soy milk pot/i);
   assert.match(result.prompt, /paper cup/i);
   assert.match(result.prompt, /avoid generic brunch/i);
+  assert.match(result.prompt, /no angled shot/i);
+  assert.match(result.prompt, /no 3\/4 view/i);
   assert.equal(requests[0].prompt, result.prompt);
 });
