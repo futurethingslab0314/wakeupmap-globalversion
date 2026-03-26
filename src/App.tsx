@@ -6,6 +6,7 @@ import { NotionRecord, WakeUpNowResponse } from "./types";
 import { getIdentityPresenceState, getInitialIdentityState, normalizeIdentityName } from "./entryState";
 import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
 import { getHeaderAnimationState, getLanguageToggleState, getMobileNavVisibility, getMobileView } from "./layoutState";
+import { isRecordPreparing } from "./recordSync";
 import {
   filterRecordsForUser,
   getLatestRecord,
@@ -157,11 +158,16 @@ export default function App() {
     setRotation([-latestRecord.longitude, -latestRecord.latitude, 0]);
   }, [currentViewState, visibleRecords]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/notion-data");
+      const response = await fetch("/api/notion-data", {
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
         throw new Error(payload?.error ?? "Failed to fetch data");
@@ -173,7 +179,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleWakeUpNow = async () => {
     const trimmedUserName = userName.trim();
@@ -188,8 +194,10 @@ export default function App() {
     try {
       const response = await fetch("/api/wake-up-now", {
         method: "POST",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
+          "Cache-Control": "no-store",
         },
         body: JSON.stringify({
           language,
@@ -233,8 +241,10 @@ export default function App() {
       if (payload?.imageJob) {
         void fetch("/api/wake-up-image", {
           method: "POST",
+          cache: "no-store",
           headers: {
             "Content-Type": "application/json",
+            "Cache-Control": "no-store",
           },
           body: JSON.stringify(payload.imageJob),
         })
@@ -289,7 +299,54 @@ export default function App() {
     fetchData();
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
-  }, []);
+  }, [fetchData]);
+
+  useEffect(() => {
+    if (!selectedRecord || !isRecordPreparing(selectedRecord, language)) {
+      return;
+    }
+
+    let cancelled = false;
+    const intervalId = window.setInterval(() => {
+      if (cancelled) {
+        return;
+      }
+      void fetchData();
+    }, 4000);
+
+    const timeoutId = window.setTimeout(() => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    }, 60000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [selectedRecord, language, fetchData]);
+
+  useEffect(() => {
+    const handleVisibilityRefresh = () => {
+      if (document.visibilityState === "visible" && selectedRecord && isRecordPreparing(selectedRecord, language)) {
+        void fetchData();
+      }
+    };
+
+    const handlePageShow = () => {
+      if (selectedRecord && isRecordPreparing(selectedRecord, language)) {
+        void fetchData();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityRefresh);
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityRefresh);
+      window.removeEventListener("pageshow", handlePageShow);
+    };
+  }, [selectedRecord, language, fetchData]);
 
   // Automatically find morning locations once records are loaded
   useEffect(() => {

@@ -4,6 +4,7 @@ import { getContinentName, getRecordCity, getRecordCountry, getRecordRecipe, get
 import { motion, AnimatePresence } from "motion/react";
 import { X, Coffee, Globe2, Layers } from "lucide-react";
 import { COUNTRY_TO_CONTINENT } from "../constants/continents";
+import { isRecordPreparing } from "../recordSync";
 
 interface DetailsPanelProps {
   record: NotionRecord | null;
@@ -17,7 +18,7 @@ interface DetailsPanelProps {
 const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, group, records, language, onClose }) => {
   if (!record && !continent && !group) return null;
   const text = uiText[language];
-  const isBreakfastPreparing = !!record && !record.imageUrl && !getRecordRecipe(record, language);
+  const isBreakfastPreparing = isRecordPreparing(record, language);
 
   // Calculate continent stats if needed
   const continentStats = React.useMemo(() => {
