@@ -66,6 +66,28 @@ function captureContext(request: WakeUpNowRequest) {
   };
 }
 
+function findExistingLocationLabels(
+  records: Array<{ latitude: number; longitude: number; cityZh?: string; countryZh?: string }>,
+  target: { latitude: number; longitude: number },
+): { cityZh: string; countryZh: string } | null {
+  const match = records.find(
+    (record) =>
+      record.latitude === target.latitude &&
+      record.longitude === target.longitude &&
+      record.cityZh?.trim() &&
+      record.countryZh?.trim(),
+  );
+
+  if (!match?.cityZh || !match.countryZh) {
+    return null;
+  }
+
+  return {
+    cityZh: match.cityZh,
+    countryZh: match.countryZh,
+  };
+}
+
 export async function runWakeUpNow(input: RunWakeUpNowInput): Promise<WakeUpNowResult> {
   const context = captureContext(input.request);
   const allRecords = await readFromNotion({
@@ -84,12 +106,13 @@ export async function runWakeUpNow(input: RunWakeUpNowInput): Promise<WakeUpNowR
     cities,
     recentRecords: allRecords,
   });
+  const existingLocationLabels = findExistingLocationLabels(allRecords, selected.city);
   const localizedNames = await localizeLocationNames({
     openai: input.openai,
     city: selected.city.city,
-    cityZh: selected.city.cityZh,
+    cityZh: existingLocationLabels?.cityZh ?? selected.city.cityZh,
     country: selected.city.country,
-    countryZh: selected.city.countryZh,
+    countryZh: existingLocationLabels?.countryZh ?? selected.city.countryZh,
   });
   const city = {
     ...selected.city,

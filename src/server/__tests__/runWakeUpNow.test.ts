@@ -13,9 +13,9 @@ import type {
 const city: CityMappingRecord = {
   id: "taipei",
   city: "Taipei",
-  cityZh: "台北",
+  cityZh: "Taipei",
   country: "Taiwan",
-  countryZh: "台灣",
+  countryZh: "Taiwan",
   timezone: "Asia/Taipei",
   latitude: 25.033,
   longitude: 121.5654,
@@ -37,7 +37,9 @@ test("runWakeUpNow writes structured story and breakfast fields to Notion and re
           properties: {
             "User Name": { type: "title", title: [{ plain_text: "YT" }] },
             City: { type: "title", title: [{ plain_text: "Taipei" }] },
+            "City ZH": { type: "rich_text", rich_text: [{ plain_text: "台北" }] },
             Country: { type: "rich_text", rich_text: [{ plain_text: "Taiwan" }] },
+            "Country ZH": { type: "rich_text", rich_text: [{ plain_text: "台灣" }] },
             Story: { type: "rich_text", rich_text: [{ plain_text: "Old story" }] },
             Tone: { type: "rich_text", rich_text: [{ plain_text: "soft" }] },
             Motifs: { type: "rich_text", rich_text: [{ plain_text: "steam" }] },
@@ -45,6 +47,8 @@ test("runWakeUpNow writes structured story and breakfast fields to Notion and re
             "Breakfast Category": { type: "rich_text", rich_text: [{ plain_text: "street breakfast set" }] },
             "Scene Setting": { type: "rich_text", rich_text: [{ plain_text: "street-side breakfast counter" }] },
             "Visual Anchors": { type: "rich_text", rich_text: [{ plain_text: "paper cup" }] },
+            Latitude: { type: "number", number: 25.033 },
+            Longitude: { type: "number", number: 121.5654 },
           },
         },
       ],
@@ -96,9 +100,6 @@ test("runWakeUpNow writes structured story and breakfast fields to Notion and re
       if (/morning greeting/i.test(request.systemPrompt)) {
         return "早安";
       }
-      if (/Translate place names/i.test(request.systemPrompt)) {
-        return JSON.stringify({ cityZh: "台北", countryZh: "台灣" });
-      }
       if (/grounded bilingual wake-up vignette/i.test(request.systemPrompt)) {
         return JSON.stringify({
           story: "Today you wake up in Taipei, Taiwan. Steam curls near the scooter-lined lane.",
@@ -138,6 +139,8 @@ test("runWakeUpNow writes structured story and breakfast fields to Notion and re
   });
 
   assert.equal(result.record.id, "page-123");
+  assert.equal(result.record.cityZh, "台北");
+  assert.equal(result.record.countryZh, "台灣");
   assert.equal(result.record.breakfastName, "Soy Milk and Youtiao");
   assert.equal(result.record.tone, "observant");
   assert.deepEqual(result.record.motifs, ["steam", "scooter lane"]);
@@ -157,4 +160,8 @@ test("runWakeUpNow writes structured story and breakfast fields to Notion and re
   assert.equal(properties["Visual Anchors"].rich_text[0].text.content, "paper cup, metal soy milk pot");
   assert.equal(properties["Avoid Repeats"].rich_text[0].text.content, "avoid cafe-table plating");
   assert.match(textRequests.map((request) => request.userPrompt).join("\n"), /recent tone: soft/i);
+  assert.equal(
+    textRequests.some((request) => /Translate place names/i.test(request.systemPrompt)),
+    false,
+  );
 });

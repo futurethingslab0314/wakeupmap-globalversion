@@ -242,6 +242,16 @@ function getRichTextProperty(properties: Record<string, unknown>, key: string): 
   return getPlainText((property as { rich_text?: unknown }).rich_text);
 }
 
+function getNumberProperty(properties: Record<string, unknown>, key: string): number | null {
+  const property = properties[key];
+  if (typeof property !== "object" || property === null || !("number" in property)) {
+    return null;
+  }
+
+  const value = (property as { number?: unknown }).number;
+  return typeof value === "number" ? value : null;
+}
+
 function findPropertyName(
   properties: Record<string, NotionPropertyDefinition>,
   type: string,
@@ -433,6 +443,54 @@ async function getRecentCityNames(apiKey: string, databaseId: string): Promise<s
       );
     })
     .filter(Boolean);
+}
+
+async function getExistingLocationLabels(
+  apiKey: string,
+  databaseId: string,
+  target: Pick<WorldCity, "latitude" | "longitude">,
+): Promise<{ cityZh: string; countryZh: string } | null> {
+  const response = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Notion-Version": "2022-06-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      page_size: 100,
+      sorts: [{ timestamp: "created_time", direction: "descending" }],
+    }),
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = (await response.json()) as NotionQueryResponse;
+
+  for (const page of payload.results ?? []) {
+    const properties = page.properties ?? {};
+    const latitude = getNumberProperty(properties, "Latitude") ?? getNumberProperty(properties, "latitude");
+    const longitude =
+      getNumberProperty(properties, "Longitude") ??
+      getNumberProperty(properties, "longitude") ??
+      getNumberProperty(properties, "longtitude");
+
+    if (latitude !== target.latitude || longitude !== target.longitude) {
+      continue;
+    }
+
+    const cityZh = getRichTextProperty(properties, "City ZH") || getRichTextProperty(properties, "city_zh");
+    const countryZh =
+      getRichTextProperty(properties, "Country ZH") || getRichTextProperty(properties, "country_zh");
+
+    if (cityZh && countryZh) {
+      return { cityZh, countryZh };
+    }
+  }
+
+  return null;
 }
 
 function selectCity(nowUtcIso: string, recentCityNames: string[]): WorldCity {
@@ -1033,7 +1091,12 @@ export default async function handler(
 
     const recentCityNames = await getRecentCityNames(notionApiKey, databaseId);
     const selectedCity = selectCity(context.nowUtcIso, recentCityNames);
-    const city = await localizeLocationNames(selectedCity);
+    const existingLocationLabels = await getExistingLocationLabels(notionApiKey, databaseId, selectedCity);
+    const city = await localizeLocationNames({
+      ...selectedCity,
+      cityZh: existingLocationLabels?.cityZh ?? selectedCity.cityZh,
+      countryZh: existingLocationLabels?.countryZh ?? selectedCity.countryZh,
+    });
     const greeting = await generateGreeting(city);
     const story = await generateStory(city, greeting, context.userName);
     const breakfastConcept = await generateBreakfastConcept(city);
