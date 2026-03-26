@@ -1,23 +1,22 @@
 import React from "react";
 import { NotionRecord } from "../types";
-import { getContinentName, getRecordCity, getRecordCountry, getRecordRecipe, getRecordStory, uiText, UiLanguage } from "../i18n";
+import { getRecordCity, getRecordCountry, getRecordRecipe, getRecordStory, uiText, UiLanguage } from "../i18n";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Coffee, Globe2, Layers } from "lucide-react";
-import { COUNTRY_TO_CONTINENT } from "../constants/continents";
 import { isRecordPreparing } from "../recordSync";
-import { getCityVisitCount } from "../mapSelection";
+import { getCityVisitCount, getCountryVisitStats } from "../mapSelection";
 
 interface DetailsPanelProps {
   record: NotionRecord | null;
-  continent: string | null;
+  country: string | null;
   group: NotionRecord[] | null;
   records: NotionRecord[];
   language: UiLanguage;
   onClose: () => void;
 }
 
-const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, group, records, language, onClose }) => {
-  if (!record && !continent && !group) return null;
+const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, country, group, records, language, onClose }) => {
+  if (!record && !country && !group) return null;
   const text = uiText[language];
   const isBreakfastPreparing = isRecordPreparing(record, language);
   const cityVisitCount = React.useMemo(() => getCityVisitCount(records, record), [records, record]);
@@ -30,16 +29,7 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, group, r
   }, [cityVisitCount, language, record]);
 
   // Calculate continent stats if needed
-  const continentStats = React.useMemo(() => {
-    if (!continent) return null;
-    const continentRecords = records.filter(r => COUNTRY_TO_CONTINENT[r.country] === continent);
-    const uniqueCountries = new Set(continentRecords.map(r => r.country));
-    return {
-      totalVisits: continentRecords.length,
-      totalCountries: uniqueCountries.size,
-      name: getContinentName(continent, language),
-    };
-  }, [continent, records, language]);
+  const countryStats = React.useMemo(() => getCountryVisitStats(records, country), [country, records]);
 
   return (
     <AnimatePresence>
@@ -58,10 +48,10 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, group, r
                 <div className="w-10 h-[1px] bg-black/20" />
                 <span className="font-mono text-[10px] text-gray-400 uppercase tracking-[0.3em]">
                   {group
-                    ? `${text.synchronizationPoint} // ${group.length}`
-                    : record
-                      ? `${text.locationData} // ${record.id.slice(0, 8)}`
-                      : `${text.continentData} // ${continent}`}
+                      ? `${text.synchronizationPoint} // ${group.length}`
+                      : record
+                        ? `${text.locationData} // ${record.id.slice(0, 8)}`
+                      : `${text.countryData} // ${country}`}
                 </span>
               </div>
               <h2 className="text-5xl font-mono font-bold text-gray-900 leading-[0.9] tracking-tighter uppercase">
@@ -69,7 +59,7 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, group, r
                   ? text.activeOperatorsToday
                   : record
                     ? getRecordCity(record, language)
-                    : continentStats?.name}
+                    : countryStats?.country}
               </h2>
               <div className="flex items-center gap-3 font-mono text-xs text-gray-500">
                 {group ? (
@@ -91,7 +81,7 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, group, r
                     ) : null}
                   </>
                 ) : (
-                  <span className="uppercase tracking-widest">{continentStats?.name ?? continent}</span>
+                  <span className="uppercase tracking-widest">{countryStats?.country ?? country}</span>
                 )}
               </div>
             </div>
@@ -206,11 +196,11 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, group, r
                       <div className="flex items-center gap-3">
                         <Globe2 className="w-4 h-4 text-accent-neon" />
                         <h3 className="font-mono text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                          {text.countries}
+                          {text.citiesVisited}
                         </h3>
                       </div>
                       <div className="text-6xl font-mono font-bold text-gray-900 tabular-nums">
-                        {String(continentStats?.totalCountries).padStart(2, '0')}
+                        {String(countryStats?.totalCities ?? 0).padStart(2, '0')}
                       </div>
                     </div>
                     <div className="space-y-4">
@@ -221,7 +211,7 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, group, r
                         </h3>
                       </div>
                       <div className="text-6xl font-mono font-bold text-gray-900 tabular-nums">
-                        {String(continentStats?.totalVisits).padStart(2, '0')}
+                        {String(countryStats?.totalVisits ?? 0).padStart(2, '0')}
                       </div>
                     </div>
                   </div>
@@ -230,14 +220,14 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, group, r
                     <div className="flex items-center gap-3">
                       <div className="w-2 h-2 bg-accent-neon rounded-full shadow-[0_0_10px_rgba(0,255,0,0.6)]" />
                       <h3 className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-gray-400">
-                        {text.continentSummary}
+                        {text.countrySummary}
                       </h3>
                     </div>
                     <p className="font-mono text-sm text-gray-500 leading-relaxed">
-                      {text.continentSummaryText(
-                        continentStats?.totalCountries ?? 0,
-                        continentStats?.name ?? continent ?? "",
-                        continentStats?.totalVisits ?? 0,
+                      {text.countrySummaryText(
+                        countryStats?.totalCities ?? 0,
+                        countryStats?.country ?? country ?? "",
+                        countryStats?.totalVisits ?? 0,
                       )}
                     </p>
                   </div>
@@ -253,7 +243,7 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, continent, group, r
                 ? `${text.activeOperatorsToday}: ${group.length}`
                 : record
                   ? `${text.timestamp}: ${record.recordedAtDate || "N/A"}`
-                  : `${text.region}: ${continentStats?.name ?? continent}`}
+                  : `${text.region}: ${countryStats?.country ?? country}`}
             </div>
             <div className="font-mono text-[9px] text-gray-400 uppercase tracking-widest">
               {text.status}

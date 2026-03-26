@@ -6,6 +6,8 @@ export const COUNTRY_TO_CONTINENT: Record<string, string> = {
   "India": "Asia",
   "Thailand": "Asia",
   "Vietnam": "Asia",
+  "Myanmar": "Asia",
+  "Burma": "Asia",
   "Indonesia": "Asia",
   "Malaysia": "Asia",
   "Singapore": "Asia",

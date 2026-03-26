@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   filterRecordsForUser,
+  getCountryVisitStats,
   getCityVisitCount,
   getCityVisitMarkerRadius,
   getLatestRecord,
@@ -187,6 +188,21 @@ test("getCityVisitCount treats identical coordinates as the same place even if c
   };
 
   assert.equal(getCityVisitCount([firstVisit, secondVisit], secondVisit), 2);
+});
+
+test("getCountryVisitStats returns total visits and unique cities for a selected country", () => {
+  const records = [
+    { ...createRecord("yangon-1", "2026-03-20", "YT"), city: "Yangon", country: "Myanmar", latitude: 16.8661, longitude: 96.1951 },
+    { ...createRecord("bagan-1", "2026-03-21", "YT"), city: "Bagan", country: "Myanmar", latitude: 21.1717, longitude: 94.8585 },
+    { ...createRecord("yangon-2", "2026-03-22", "YT"), city: "Yangon", country: "Myanmar", latitude: 16.8661, longitude: 96.1951 },
+    { ...createRecord("tokyo-1", "2026-03-23", "YT"), city: "Tokyo", country: "Japan", latitude: 35.6762, longitude: 139.6503 },
+  ];
+
+  assert.deepEqual(getCountryVisitStats(records, "Myanmar"), {
+    totalVisits: 3,
+    totalCities: 2,
+    country: "Myanmar",
+  });
 });
 
 test("isMainView returns true only when no detail or journal panel is open", () => {

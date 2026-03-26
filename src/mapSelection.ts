@@ -6,6 +6,12 @@ interface ViewState {
   selectedContinent: string | null;
 }
 
+interface CountryVisitStats {
+  country: string;
+  totalVisits: number;
+  totalCities: number;
+}
+
 function getRecordedAtTimestamp(record: NotionRecord): number {
   if (record.recordedAtDate) {
     const timePart = record.recordedAt?.trim() || "00:00:00";
@@ -157,6 +163,21 @@ export function getCityVisitMarkerRadius(records: NotionRecord[], targetRecord: 
   }
 
   return 2;
+}
+
+export function getCountryVisitStats(records: NotionRecord[], targetCountry: string | null): CountryVisitStats | null {
+  if (!targetCountry) {
+    return null;
+  }
+
+  const countryRecords = records.filter((record) => record.country === targetCountry);
+  const uniqueCities = new Set(countryRecords.map((record) => record.city));
+
+  return {
+    country: targetCountry,
+    totalVisits: countryRecords.length,
+    totalCities: uniqueCities.size,
+  };
 }
 
 export function isMainView(state: ViewState): boolean {

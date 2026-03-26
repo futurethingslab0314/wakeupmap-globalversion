@@ -20,7 +20,6 @@ import { getGreetingBubbleHitArea, getMarkerLabelHitArea, getWakeupBubbleHitArea
 import { motion } from "motion/react";
 import { geoOrthographic } from "d3-geo";
 import { soundService } from "../services/soundService";
-import { COUNTRY_TO_CONTINENT } from "../constants/continents";
 
 const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
@@ -30,7 +29,7 @@ interface MapProps {
   rotation: [number, number, number];
   onRotationChange: (rotation: [number, number, number]) => void;
   onSelectRecord: (record: NotionRecord) => void;
-  onSelectContinent: (continent: string) => void;
+  onSelectCountry: (country: string) => void;
   selectedId?: string;
   highlightedIds?: string[];
   isWakeupMode?: boolean;
@@ -44,7 +43,7 @@ const Map: React.FC<MapProps> = ({
   rotation,
   onRotationChange,
   onSelectRecord, 
-  onSelectContinent, 
+  onSelectCountry, 
   selectedId, 
   highlightedIds = [],
   isWakeupMode = false,
@@ -318,9 +317,8 @@ const Map: React.FC<MapProps> = ({
                 geography={geo}
                 onClick={() => {
                   const countryName = geo.properties.name || geo.properties.NAME;
-                  const continent = COUNTRY_TO_CONTINENT[countryName];
-                  if (continent) {
-                    onSelectContinent(continent);
+                  if (countryName) {
+                    onSelectCountry(countryName);
                     soundService.playClick();
                   }
                 }}

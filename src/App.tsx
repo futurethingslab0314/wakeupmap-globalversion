@@ -36,7 +36,7 @@ export default function App() {
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [selectedContinent, setSelectedContinent] = useState<string | null>(null);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [userName, setUserName] = useState(bootIdentityState.userName);
   const [isNameConfirmed, setIsNameConfirmed] = useState(bootIdentityState.isNameConfirmed);
   const [showEntryScreen, setShowEntryScreen] = useState(bootIdentityState.shouldShowEntryScreen);
@@ -52,11 +52,11 @@ export default function App() {
     [records],
   );
   const entryIdentityStatus = getIdentityPresenceState(userName, existingIdentityNames);
-  const hasDetailPanelOpen = !!(selectedRecord || selectedContinent || selectedGroup);
+  const hasDetailPanelOpen = !!(selectedRecord || selectedCountry || selectedGroup);
   const mobileView = getMobileView({
     showDatabase,
     hasSelectedRecord: !!selectedRecord,
-    hasSelectedContinent: !!selectedContinent,
+    hasSelectedContinent: !!selectedCountry,
     hasSelectedGroup: !!selectedGroup,
   });
   const mobileNavVisibility = getMobileNavVisibility(mobileView);
@@ -67,7 +67,7 @@ export default function App() {
   const currentViewState = {
     showDatabase,
     selectedRecordId: selectedRecord?.id ?? null,
-    selectedContinent,
+    selectedContinent: selectedCountry,
   };
   const previousViewStateRef = useRef(currentViewState);
   const visibleRecords = React.useMemo(() => {
@@ -94,7 +94,7 @@ export default function App() {
     setShowWakeupToday(next);
     setSelectedRecord(null);
     setSelectedGroup(null);
-    setSelectedContinent(null);
+    setSelectedCountry(null);
     if (next) {
       setShowDatabase(false);
     }
@@ -112,7 +112,7 @@ export default function App() {
       setIsNameConfirmed(true);
       setShowEntryScreen(false);
       setSelectedRecord(null);
-      setSelectedContinent(null);
+      setSelectedCountry(null);
       setSelectedGroup(null);
       setShowDatabase(false);
       setShowWakeupToday(false);
@@ -404,7 +404,7 @@ export default function App() {
         const currentIndex = selectedRecord ? sortedRecords.findIndex(r => r.id === selectedRecord.id) : -1;
         const nextIndex = (currentIndex + 1) % sortedRecords.length;
         setSelectedRecord(sortedRecords[nextIndex]);
-        setSelectedContinent(null);
+        setSelectedCountry(null);
         soundService.playClick();
       } else if (e.key === "ArrowUp") {
         if (showDatabase) {
@@ -418,7 +418,7 @@ export default function App() {
         const currentIndex = selectedRecord ? sortedRecords.findIndex(r => r.id === selectedRecord.id) : sortedRecords.length;
         const prevIndex = (currentIndex - 1 + sortedRecords.length) % sortedRecords.length;
         setSelectedRecord(sortedRecords[prevIndex]);
-        setSelectedContinent(null);
+        setSelectedCountry(null);
         soundService.playClick();
       } else if (e.key === "Enter") {
         if (showDatabase && sortedRecords.length > 0) {
@@ -428,10 +428,10 @@ export default function App() {
         }
       } else if (e.key === "ArrowLeft") {
         // Move towards Review Journal (Left side)
-        if (selectedRecord || selectedContinent) {
+        if (selectedRecord || selectedCountry) {
           // If on Details (Right), return to Main (Center)
           setSelectedRecord(null);
-          setSelectedContinent(null);
+          setSelectedCountry(null);
         } else if (!showDatabase) {
           // If on Main (Center), go to Journal (Left)
           setShowDatabase(true);
@@ -442,7 +442,7 @@ export default function App() {
         if (showDatabase) {
           // If on Journal (Left), return to Main (Center)
           setShowDatabase(false);
-        } else if (!selectedRecord && !selectedContinent) {
+        } else if (!selectedRecord && !selectedCountry) {
           // If on Main (Center), go to Details (Right)
           if (sortedRecords.length > 0) {
             setSelectedRecord(sortedRecords[0]);
@@ -451,7 +451,7 @@ export default function App() {
         soundService.playClick();
       } else if (e.key === "Escape") {
         setSelectedRecord(null);
-        setSelectedContinent(null);
+        setSelectedCountry(null);
         setShowDatabase(false);
         soundService.playClick();
       }
@@ -459,7 +459,7 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [loading, error, showDatabase, records, selectedRecord, selectedContinent, showEntryScreen]);
+  }, [loading, error, showDatabase, records, selectedRecord, selectedCountry, showEntryScreen]);
 
   if (showEntryScreen) {
     return (
@@ -606,10 +606,10 @@ export default function App() {
           onSelectRecord={(record) => {
             soundService.playClick();
             setSelectedRecord(record);
-            setSelectedContinent(null);
+            setSelectedCountry(null);
           }}
-          onSelectContinent={(continent) => {
-            setSelectedContinent(continent);
+          onSelectCountry={(country) => {
+            setSelectedCountry(country);
             setSelectedRecord(null);
           }}
           selectedId={selectedRecord?.id}
@@ -652,7 +652,7 @@ export default function App() {
                     setShowWakeupToday(false);
                     setShowDatabase(false);
                     setSelectedRecord(null);
-                    setSelectedContinent(null);
+                    setSelectedCountry(null);
                     setSelectedGroup(null);
                     setHighlightedIds([]);
                   }}
@@ -793,7 +793,7 @@ export default function App() {
                       setShowWakeupToday(false);
                       setShowDatabase(false);
                       setSelectedRecord(null);
-                      setSelectedContinent(null);
+                      setSelectedCountry(null);
                       setSelectedGroup(null);
                       setHighlightedIds([]);
                     }}
@@ -1101,14 +1101,14 @@ export default function App() {
       {/* Details Panel */}
       <DetailsPanel
         record={selectedRecord}
-        continent={selectedContinent}
+        country={selectedCountry}
         group={selectedGroup}
         records={visibleRecords}
         language={language}
         onClose={() => {
           soundService.playClick();
           setSelectedRecord(null);
-          setSelectedContinent(null);
+          setSelectedCountry(null);
           setSelectedGroup(null);
         }}
       />
@@ -1123,13 +1123,13 @@ export default function App() {
               soundService.playClick();
               if (mobileView === "detail") {
                 setSelectedRecord(null);
-                setSelectedContinent(null);
+                setSelectedCountry(null);
                 setSelectedGroup(null);
               } else if (showDatabase) {
                 setShowDatabase(false);
               } else {
                 setSelectedRecord(null);
-                setSelectedContinent(null);
+                setSelectedCountry(null);
                 setSelectedGroup(null);
                 setShowDatabase(true);
                 setShowWakeupToday(false);
