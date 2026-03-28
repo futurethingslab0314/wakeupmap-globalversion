@@ -5,6 +5,7 @@ import ParticleStorm from "./components/ParticleStorm";
 import { NotionRecord, WakeUpNowResponse } from "./types";
 import { getIdentityPresenceState, getInitialIdentityState, normalizeIdentityName } from "./entryState";
 import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
+import { getJournalDateLabel } from "./journalTable";
 import { getHeaderAnimationState, getLanguageToggleState, getMobileNavVisibility, getMobileView } from "./layoutState";
 import { getCompletedRecordFromSnapshot, isRecordPreparing } from "./recordSync";
 import {
@@ -1167,7 +1168,7 @@ export default function App() {
                     <table className="min-w-[680px] text-left font-mono text-[11px] lg:min-w-full">
                       <thead>
                         <tr className="border-b border-black/10 text-gray-400 uppercase tracking-widest">
-                          <th className="py-6 px-4 font-medium">Index</th>
+                          <th className="py-6 px-4 font-medium">{text.date}</th>
                           <th className="py-6 px-4 font-medium">{text.location}</th>
                           <th className="py-6 px-4 font-medium">{text.greeting}</th>
                           <th className="py-6 px-4 font-medium">{text.action}</th>
@@ -1183,12 +1184,8 @@ export default function App() {
                               soundService.playHover();
                             }}
                           >
-                            <td className="py-4 px-4 text-gray-300 tabular-nums">
-                              {highlightedJournalIndex === idx ? (
-                                <span className="text-accent-neon font-bold">→</span>
-                              ) : (
-                                String(idx + 1).padStart(3, '0')
-                              )}
+                            <td className={`py-4 px-4 tabular-nums ${highlightedJournalIndex === idx ? "text-black" : "text-gray-300"}`}>
+                              {getJournalDateLabel(record)}
                             </td>
                             <td className="py-4 px-4">
                               <div className="font-bold text-gray-900 uppercase">{getRecordCity(record, language)}</div>
