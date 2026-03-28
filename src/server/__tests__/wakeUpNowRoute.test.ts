@@ -54,6 +54,9 @@ test("wake up now route validates POST and delegates to the pipeline", async () 
       body: {
         language: "en",
         userName: "YT",
+        currentBase: "Taipei, Taiwan",
+        currentBaseLatitude: 25.033,
+        currentBaseLongitude: 121.5654,
       },
     },
     response,
@@ -63,6 +66,9 @@ test("wake up now route validates POST and delegates to the pipeline", async () 
   assert.deepEqual(receivedBody, {
     language: "en",
     userName: "YT",
+    currentBase: "Taipei, Taiwan",
+    currentBaseLatitude: 25.033,
+    currentBaseLongitude: 121.5654,
   });
   assert.deepEqual(jsonPayload, {
     record: {

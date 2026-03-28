@@ -149,6 +149,7 @@ function sanitizeOptionName(value: string, maxLength = 60): string {
 
 interface BuildWakeUpPagePropertiesInput {
   userName: string;
+  currentBase?: string;
   city: string;
   cityZh: string;
   country: string;
@@ -190,6 +191,7 @@ export function buildWakeUpPageProperties(
   }
 
   const richTextMappings: Array<[string[], string]> = [
+    [["current base", "currentbase"], input.currentBase ?? ""],
     [["city"], input.city],
     [["city zh", "cityzh", "city_zh"], input.cityZh],
     [["country"], input.country],

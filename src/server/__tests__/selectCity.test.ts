@@ -122,6 +122,37 @@ test("selectCity uses recent records only as a tie-breaker after time proximity"
   assert.equal(result.minuteDiffToEight, 0);
 });
 
+test("selectCity uses current base spherical distance when current base context is provided", () => {
+  const result = selectCity({
+    nowUtcIso: "2026-03-27T00:20:00.000Z",
+    currentBaseLatitude: 25,
+    currentBaseLongitude: 121,
+    currentBaseLocalDate: "2026-03-27",
+    currentBaseLocalMinute: 30,
+    cities: [
+      createCity({
+        id: "north-target",
+        city: "North Target",
+        latitude: 63.5,
+        longitude: 140,
+        utcOffset: 8,
+        population: 100,
+      }),
+      createCity({
+        id: "near-home",
+        city: "Near Home",
+        latitude: 30,
+        longitude: 121,
+        utcOffset: 8,
+        population: 100,
+      }),
+    ],
+    recentRecords: [],
+  });
+
+  assert.equal(result.city.id, "north-target");
+});
+
 test("cityMapping exports a typed starter dataset", () => {
   assert.ok(cityMapping.length >= 5);
   assert.ok(cityMapping.every((city) => typeof city.languageCode === "string"));

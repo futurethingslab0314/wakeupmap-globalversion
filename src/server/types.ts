@@ -20,6 +20,9 @@ export interface WakeUpNowRequest {
   userName?: string;
   clientTimeZone?: string;
   clientIsoTime?: string;
+  currentBase?: string;
+  currentBaseLatitude?: number;
+  currentBaseLongitude?: number;
 }
 
 export interface WakeUpNowResult {
@@ -50,6 +53,10 @@ export interface SelectCityInput {
   nowUtcIso: string;
   cities: CityMappingRecord[];
   recentRecords: NormalizedNotionRecord[];
+  currentBaseLatitude?: number;
+  currentBaseLongitude?: number;
+  currentBaseLocalDate?: string;
+  currentBaseLocalMinute?: number;
 }
 
 export interface SelectCityResult {

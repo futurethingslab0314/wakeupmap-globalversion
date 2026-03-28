@@ -48,6 +48,32 @@ function formatDatePart(date: Date, timeZone: string): string {
   }).format(date);
 }
 
+function formatMinutePart(date: Date, timeZone: string): number {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    minute: "2-digit",
+  });
+  const parts = formatter.formatToParts(date);
+  return Number(parts.find((part) => part.type === "minute")?.value ?? "0");
+}
+
+function getDistanceBetweenCoordinates(
+  left: { latitude: number; longitude: number },
+  right: { latitude: number; longitude: number },
+): number {
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const deltaLatitude = toRadians(right.latitude - left.latitude);
+  const deltaLongitude = toRadians(right.longitude - left.longitude);
+  const leftLatitude = toRadians(left.latitude);
+  const rightLatitude = toRadians(right.latitude);
+  const a =
+    Math.sin(deltaLatitude / 2) ** 2 +
+    Math.cos(leftLatitude) * Math.cos(rightLatitude) * Math.sin(deltaLongitude / 2) ** 2;
+
+  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function captureContext(request: WakeUpNowRequest) {
   const userName = request.userName?.trim();
   if (!userName) {
@@ -62,6 +88,7 @@ function captureContext(request: WakeUpNowRequest) {
     timezone,
     recordedAtIso: recordedAtDateTime.toISOString(),
     recordedAtDate: formatDatePart(recordedAtDateTime, timezone),
+    recordedAtMinute: formatMinutePart(recordedAtDateTime, timezone),
     nowUtcIso: request.nowUtcIso ?? recordedAtDateTime.toISOString(),
   };
 }
@@ -88,6 +115,36 @@ function findExistingLocationLabels(
   };
 }
 
+function resolveCurrentBaseLabel(
+  request: WakeUpNowRequest,
+  cities: CityMappingRecord[],
+): string | undefined {
+  if (request.currentBase?.trim()) {
+    return request.currentBase.trim();
+  }
+
+  if (
+    typeof request.currentBaseLatitude !== "number" ||
+    typeof request.currentBaseLongitude !== "number"
+  ) {
+    return undefined;
+  }
+
+  const nearestCity = [...cities].sort(
+    (left, right) =>
+      getDistanceBetweenCoordinates(
+        { latitude: request.currentBaseLatitude as number, longitude: request.currentBaseLongitude as number },
+        left,
+      ) -
+      getDistanceBetweenCoordinates(
+        { latitude: request.currentBaseLatitude as number, longitude: request.currentBaseLongitude as number },
+        right,
+      ),
+  )[0];
+
+  return nearestCity ? `${nearestCity.city}, ${nearestCity.country}` : undefined;
+}
+
 export async function runWakeUpNow(input: RunWakeUpNowInput): Promise<WakeUpNowResult> {
   const context = captureContext(input.request);
   const allRecords = await readFromNotion({
@@ -101,10 +158,19 @@ export async function runWakeUpNow(input: RunWakeUpNowInput): Promise<WakeUpNowR
     recentRecords: userRecords,
   });
   const cities = input.cities ?? loadWorldCities(context.nowUtcIso);
+  const currentBaseLabel = resolveCurrentBaseLabel(input.request, cities);
   const selected = selectCity({
     nowUtcIso: context.nowUtcIso,
     cities,
     recentRecords: allRecords,
+    ...(typeof input.request.currentBaseLatitude === "number"
+      ? { currentBaseLatitude: input.request.currentBaseLatitude }
+      : {}),
+    ...(typeof input.request.currentBaseLongitude === "number"
+      ? { currentBaseLongitude: input.request.currentBaseLongitude }
+      : {}),
+    currentBaseLocalDate: context.recordedAtDate,
+    currentBaseLocalMinute: context.recordedAtMinute,
   });
   const existingLocationLabels = findExistingLocationLabels(allRecords, selected.city);
   const localizedNames = await localizeLocationNames({
@@ -137,6 +203,7 @@ export async function runWakeUpNow(input: RunWakeUpNowInput): Promise<WakeUpNowR
   const createPageResult = (await input.notion.createPage(input.databaseId, {
     properties: buildWakeUpPageProperties(database.properties, {
       userName: context.userName,
+      ...(currentBaseLabel ? { currentBase: currentBaseLabel } : {}),
       city: city.city,
       cityZh: city.cityZh,
       country: city.country,

@@ -7,6 +7,7 @@ test("buildWakeUpPageProperties writes stable formatting for rich-text taxonomy 
   const properties = buildWakeUpPageProperties(
     {
       "User Name": { type: "title" },
+      "Current Base": { type: "rich_text" },
       Tone: { type: "rich_text" },
       "Breakfast Category": { type: "rich_text" },
       "Scene Setting": { type: "rich_text" },
@@ -15,6 +16,7 @@ test("buildWakeUpPageProperties writes stable formatting for rich-text taxonomy 
     },
     {
       userName: "YT",
+      currentBase: "Taipei, Taiwan",
       city: "",
       cityZh: "",
       country: "",
@@ -45,6 +47,7 @@ test("buildWakeUpPageProperties writes stable formatting for rich-text taxonomy 
     },
   ) as Record<string, any>;
 
+  assert.equal(properties["Current Base"].rich_text[0].text.content, "Taipei, Taiwan");
   assert.equal(properties["Tone"].rich_text[0].text.content, "soft");
   assert.equal(
     properties["Breakfast Category"].rich_text[0].text.content,

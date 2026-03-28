@@ -62,6 +62,13 @@ export const uiText = {
     entryIdentityHint: "Enter a public wakeup identity to open its globe page.",
     emptyIdentityTitle: "Identity Ready",
     emptyIdentityText: "No wakeup records yet. Trigger Wake Up Now to create the first one.",
+    locateCurrentBase: "Locate Current Base",
+    refreshCurrentBase: "Refresh Current Base",
+    currentBaseReady: "Current base cached",
+    currentBaseMissing: "No current base cached yet.",
+    currentBaseLocating: "Locating current base...",
+    currentBaseUnsupported: "Geolocation is not supported on this device.",
+    currentBaseDenied: "Location access was denied. You can allow it and try again.",
   },
   zh: {
     operatorIdentity: "操作員身分",
@@ -121,6 +128,13 @@ export const uiText = {
     entryIdentityHint: "輸入公開的甦醒身分名稱，即可開啟對應地球頁。",
     emptyIdentityTitle: "身分已就緒",
     emptyIdentityText: "目前還沒有甦醒紀錄，按下 Wake Up Now 建立第一筆。",
+    locateCurrentBase: "定位目前基地",
+    refreshCurrentBase: "更新目前基地",
+    currentBaseReady: "目前基地已快取",
+    currentBaseMissing: "目前還沒有快取的基地位置。",
+    currentBaseLocating: "正在定位目前基地...",
+    currentBaseUnsupported: "這個裝置不支援定位。",
+    currentBaseDenied: "定位權限被拒絕，可以開啟後再試一次。",
   },
 } as const;
 

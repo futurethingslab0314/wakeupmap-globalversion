@@ -44,12 +44,16 @@ type WakeUpNowBody = {
   nowUtcIso?: string;
   clientTimeZone?: string;
   clientIsoTime?: string;
+  currentBase?: string;
+  currentBaseLatitude?: number;
+  currentBaseLongitude?: number;
 };
 
 type WakeUpContext = {
   userName: string;
   timezone: string;
   recordedAtDate: string;
+  recordedAtMinute: number;
   recordedAt: string;
   recordedAtIso: string;
   nowUtcIso: string;
@@ -313,6 +317,15 @@ function formatTimePart(date: Date, timeZone: string): string {
   return formatter.format(date);
 }
 
+function formatMinutePart(date: Date, timeZone: string): number {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    minute: "2-digit",
+  });
+  const parts = formatter.formatToParts(date);
+  return Number(parts.find((part) => part.type === "minute")?.value ?? "0");
+}
+
 function captureWakeUpContext(body: WakeUpNowBody): WakeUpContext {
   const userName = body.userName?.trim();
   if (!userName) {
@@ -327,6 +340,7 @@ function captureWakeUpContext(body: WakeUpNowBody): WakeUpContext {
     userName,
     timezone,
     recordedAtDate: formatDatePart(recordedAtDateTime, timezone),
+    recordedAtMinute: formatMinutePart(recordedAtDateTime, timezone),
     recordedAt: formatTimePart(recordedAtDateTime, timezone),
     recordedAtIso: recordedAtDateTime.toISOString(),
     nowUtcIso,
@@ -375,6 +389,78 @@ function getLocalMinutesInTimeZone(nowUtcIso: string, timezone: string): number 
 
 function getMinuteDiffToEight(nowUtcIso: string, timezone: string): number {
   return Math.abs(getLocalMinutesInTimeZone(nowUtcIso, timezone) - 8 * 60);
+}
+
+function getMinuteTimeBand(minuteDiffToEight: number): number {
+  if (minuteDiffToEight <= 30) {
+    return 0;
+  }
+
+  if (minuteDiffToEight <= 60) {
+    return 1;
+  }
+
+  if (minuteDiffToEight <= 120) {
+    return 2;
+  }
+
+  return 3;
+}
+
+function getSphericalDistanceDegrees(minute: number): number {
+  return (Math.max(0, Math.min(minute, 59)) / 59) * 180;
+}
+
+function normalizeLatitudeAfterArc(latitude: number): number {
+  let next = latitude;
+
+  while (next > 90 || next < -90) {
+    if (next > 90) {
+      next = 180 - next;
+      continue;
+    }
+
+    next = -180 - next;
+  }
+
+  return next;
+}
+
+function getTargetLatitude(body: WakeUpNowBody, context: WakeUpContext): number | null {
+  if (
+    typeof body.currentBaseLatitude !== "number" ||
+    typeof context.recordedAtMinute !== "number" ||
+    !context.recordedAtDate
+  ) {
+    return null;
+  }
+
+  const day = Number(context.recordedAtDate.split("-")[2] ?? "0");
+  if (!Number.isFinite(day) || day <= 0) {
+    return null;
+  }
+
+  const distanceDegrees = getSphericalDistanceDegrees(context.recordedAtMinute);
+  const signedDistance = day % 2 === 1 ? distanceDegrees : -distanceDegrees;
+
+  return normalizeLatitudeAfterArc(body.currentBaseLatitude + signedDistance);
+}
+
+function getDistanceBetweenCoordinates(
+  left: { latitude: number; longitude: number },
+  right: { latitude: number; longitude: number },
+): number {
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const deltaLatitude = toRadians(right.latitude - left.latitude);
+  const deltaLongitude = toRadians(right.longitude - left.longitude);
+  const leftLatitude = toRadians(left.latitude);
+  const rightLatitude = toRadians(right.latitude);
+  const a =
+    Math.sin(deltaLatitude / 2) ** 2 +
+    Math.cos(leftLatitude) * Math.cos(rightLatitude) * Math.sin(deltaLongitude / 2) ** 2;
+
+  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function isUsableCity(city: RawWorldCity): boolean {
@@ -493,17 +579,26 @@ async function getExistingLocationLabels(
   return null;
 }
 
-function selectCity(nowUtcIso: string, recentCityNames: string[]): WorldCity {
+function selectCity(nowUtcIso: string, recentCityNames: string[], body: WakeUpNowBody, context: WakeUpContext): WorldCity {
   const recent = new Set(recentCityNames.map((city) => city.toLowerCase()));
   const cities = loadWorldCities(nowUtcIso);
+  const targetLatitude = getTargetLatitude(body, context);
 
   const ranked = cities
     .map((city) => ({
       city,
       minuteDiffToEight: getMinuteDiffToEight(nowUtcIso, city.timezone),
       isRecent: recent.has(city.city.toLowerCase()),
+      latitudeDiffFromTarget: targetLatitude === null ? Infinity : Math.abs(city.latitude - targetLatitude),
+      timeBand: getMinuteTimeBand(getMinuteDiffToEight(nowUtcIso, city.timezone)),
     }))
     .sort((left, right) => {
+      if (left.timeBand !== right.timeBand) {
+        return left.timeBand - right.timeBand;
+      }
+      if (left.latitudeDiffFromTarget !== right.latitudeDiffFromTarget) {
+        return left.latitudeDiffFromTarget - right.latitudeDiffFromTarget;
+      }
       if (left.minuteDiffToEight !== right.minuteDiffToEight) {
         return left.minuteDiffToEight - right.minuteDiffToEight;
       }
@@ -514,6 +609,30 @@ function selectCity(nowUtcIso: string, recentCityNames: string[]): WorldCity {
     });
 
   return ranked[0].city;
+}
+
+function resolveCurrentBaseLabel(body: WakeUpNowBody, cities: WorldCity[]): string | undefined {
+  if (body.currentBase?.trim()) {
+    return body.currentBase.trim();
+  }
+
+  if (typeof body.currentBaseLatitude !== "number" || typeof body.currentBaseLongitude !== "number") {
+    return undefined;
+  }
+
+  const nearestCity = [...cities].sort(
+    (left, right) =>
+      getDistanceBetweenCoordinates(
+        { latitude: body.currentBaseLatitude as number, longitude: body.currentBaseLongitude as number },
+        left,
+      ) -
+      getDistanceBetweenCoordinates(
+        { latitude: body.currentBaseLatitude as number, longitude: body.currentBaseLongitude as number },
+        right,
+      ),
+  )[0];
+
+  return nearestCity ? `${nearestCity.city}, ${nearestCity.country}` : undefined;
 }
 
 function getOpenAIApiKey(): string {
@@ -910,6 +1029,7 @@ function buildNotionProperties(
   schema: Record<string, NotionPropertyDefinition>,
   record: {
     userName: string;
+    currentBase?: string;
     city: string;
     cityZh: string;
     country: string;
@@ -951,6 +1071,7 @@ function buildNotionProperties(
   }
 
   const richTextMappings: Array<[string[], string]> = [
+    [["current base", "currentbase"], record.currentBase ?? ""],
     [["city"], record.city],
     [["city zh", "cityzh", "city_zh"], record.cityZh],
     [["country"], record.country],
@@ -1090,7 +1211,8 @@ export default async function handler(
     const schema = database.properties ?? {};
 
     const recentCityNames = await getRecentCityNames(notionApiKey, databaseId);
-    const selectedCity = selectCity(context.nowUtcIso, recentCityNames);
+    const selectedCity = selectCity(context.nowUtcIso, recentCityNames, request.body ?? {}, context);
+    const currentBaseLabel = resolveCurrentBaseLabel(request.body ?? {}, loadWorldCities(context.nowUtcIso));
     const existingLocationLabels = await getExistingLocationLabels(notionApiKey, databaseId, selectedCity);
     const city = await localizeLocationNames({
       ...selectedCity,
@@ -1111,6 +1233,7 @@ export default async function handler(
         parent: { database_id: databaseId },
         properties: buildNotionProperties(schema, {
           userName: context.userName,
+          ...(currentBaseLabel ? { currentBase: currentBaseLabel } : {}),
           city: city.city,
           cityZh: city.cityZh,
           country: city.country,

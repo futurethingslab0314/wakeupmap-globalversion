@@ -20,6 +20,15 @@ import { motion, AnimatePresence } from "motion/react";
 import { Coffee, Loader2, AlertCircle, RefreshCw, Sun, Clock, Database, X, Volume2, VolumeX, Users, Globe2, ChevronLeft, ChevronRight } from "lucide-react";
 import { soundService } from "./services/soundService";
 
+interface CurrentBaseState {
+  latitude: number;
+  longitude: number;
+  label: string;
+  updatedAt: string;
+}
+
+const CURRENT_BASE_STORAGE_KEY = "wakeupmap.current-base";
+
 export default function App() {
   const bootIdentityState =
     typeof window !== "undefined"
@@ -37,6 +46,8 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [currentBase, setCurrentBase] = useState<CurrentBaseState | null>(null);
+  const [currentBaseLoading, setCurrentBaseLoading] = useState(false);
   const [userName, setUserName] = useState(bootIdentityState.userName);
   const [isNameConfirmed, setIsNameConfirmed] = useState(bootIdentityState.isNameConfirmed);
   const [showEntryScreen, setShowEntryScreen] = useState(bootIdentityState.shouldShowEntryScreen);
@@ -181,6 +192,49 @@ export default function App() {
     }
   }, []);
 
+  const locateCurrentBase = useCallback(() => {
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      setError(text.currentBaseUnsupported);
+      return;
+    }
+
+    setCurrentBaseLoading(true);
+    setError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextBase = {
+          latitude: Number(position.coords.latitude.toFixed(6)),
+          longitude: Number(position.coords.longitude.toFixed(6)),
+          label: `${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`,
+          updatedAt: new Date().toISOString(),
+        };
+
+        setCurrentBase(nextBase);
+        window.localStorage.setItem(CURRENT_BASE_STORAGE_KEY, JSON.stringify(nextBase));
+        setCurrentBaseLoading(false);
+      },
+      (geoError) => {
+        setCurrentBaseLoading(false);
+        if (geoError.code === geoError.PERMISSION_DENIED) {
+          setError(text.currentBaseDenied);
+          return;
+        }
+
+        setError(geoError.message || text.connectionError);
+      },
+      {
+        enableHighAccuracy: false,
+        maximumAge: 1000 * 60 * 30,
+        timeout: 10000,
+      },
+    );
+  }, [text.connectionError, text.currentBaseDenied, text.currentBaseUnsupported]);
+
   const handleWakeUpNow = async () => {
     const trimmedUserName = userName.trim();
     if (!trimmedUserName) {
@@ -204,6 +258,10 @@ export default function App() {
           userName: trimmedUserName,
           clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           clientIsoTime: new Date().toISOString(),
+          ...(currentBase ? {
+            currentBaseLatitude: currentBase.latitude,
+            currentBaseLongitude: currentBase.longitude,
+          } : {}),
         }),
       });
 
@@ -300,6 +358,36 @@ export default function App() {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, [fetchData]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const cachedValue = window.localStorage.getItem(CURRENT_BASE_STORAGE_KEY);
+    if (!cachedValue) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(cachedValue) as Partial<CurrentBaseState>;
+      if (
+        typeof parsed.latitude === "number" &&
+        typeof parsed.longitude === "number" &&
+        typeof parsed.label === "string" &&
+        typeof parsed.updatedAt === "string"
+      ) {
+        setCurrentBase({
+          latitude: parsed.latitude,
+          longitude: parsed.longitude,
+          label: parsed.label,
+          updatedAt: parsed.updatedAt,
+        });
+      }
+    } catch {
+      window.localStorage.removeItem(CURRENT_BASE_STORAGE_KEY);
+    }
+  }, []);
 
   useEffect(() => {
     if (!selectedRecord || !isRecordPreparing(selectedRecord, language)) {
@@ -527,15 +615,15 @@ export default function App() {
                 className="w-full border-b border-black/15 bg-transparent pb-4 font-mono text-2xl font-bold uppercase tracking-[0.18em] text-black outline-none transition-colors placeholder:text-gray-200 focus:border-accent-neon"
               />
 
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-gray-400">
-                  {loading
-                    ? text.entryIdentityStatusLoading
-                    : entryIdentityStatus === "existing"
-                      ? text.entryIdentityStatusExisting
-                      : text.entryIdentityStatusNew}
-                </p>
-                <motion.button
+	              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+	                <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-gray-400">
+	                  {loading
+	                    ? text.entryIdentityStatusLoading
+	                    : entryIdentityStatus === "existing"
+	                      ? text.entryIdentityStatusExisting
+	                      : text.entryIdentityStatusNew}
+	                </p>
+	                <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => handleEnterIdentity(userName)}
@@ -546,11 +634,33 @@ export default function App() {
                       : "bg-white text-gray-300 border-black/10"
                   }`}
                 >
-                  <Globe2 className="h-4 w-4" />
-                  {text.enterGlobe}
-                </motion.button>
-              </div>
-            </div>
+	                  <Globe2 className="h-4 w-4" />
+	                  {text.enterGlobe}
+	                </motion.button>
+	              </div>
+	              <div className="flex flex-col gap-3 border border-black/10 bg-black/[0.02] p-4">
+	                <div className="flex items-center justify-between gap-4">
+	                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-gray-400">
+	                    {currentBase ? `${text.currentBaseReady} // ${currentBase.label}` : text.currentBaseMissing}
+	                  </p>
+	                  <motion.button
+	                    whileHover={{ scale: 1.02 }}
+	                    whileTap={{ scale: 0.98 }}
+	                    onClick={locateCurrentBase}
+	                    disabled={currentBaseLoading}
+	                    className="inline-flex items-center gap-2 border border-black px-4 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-black transition-colors disabled:border-black/10 disabled:text-gray-300"
+	                  >
+	                    {currentBaseLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+	                    {text.locateCurrentBase}
+	                  </motion.button>
+	                </div>
+	                {currentBaseLoading ? (
+	                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-gray-400">
+	                    {text.currentBaseLocating}
+	                  </p>
+	                ) : null}
+	              </div>
+	            </div>
 
             {error ? (
               <div className="mt-8 border border-red-200 bg-red-50/70 p-4">
@@ -741,10 +851,26 @@ export default function App() {
             <div className={`w-2 h-2 rounded-none animate-pulse ${wakeUpLoading ? "bg-black/30" : "bg-black"}`} />
           </motion.button>
 
-          <div className="flex flex-col gap-4 mt-4">
-            <motion.button
-              whileHover={{ x: 5 }}
-              onMouseEnter={() => soundService.playHover()}
+	          <div className="flex flex-col gap-4 mt-4">
+	            <motion.button
+	              whileHover={{ x: 5 }}
+	              onMouseEnter={() => soundService.playHover()}
+	              onClick={locateCurrentBase}
+	              disabled={currentBaseLoading}
+	              className="flex items-center gap-4 font-mono text-[11px] uppercase tracking-[0.2em] text-gray-400 hover:text-black transition-colors group disabled:opacity-40"
+	            >
+	              <div className="w-10 h-[1px] bg-gray-200 group-hover:bg-black transition-colors" />
+	              {currentBaseLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+	              {text.refreshCurrentBase}
+	            </motion.button>
+
+	            <p className="pl-14 font-mono text-[9px] uppercase tracking-[0.18em] text-gray-300">
+	              {currentBase ? `${text.currentBaseReady} // ${currentBase.label}` : text.currentBaseMissing}
+	            </p>
+
+	            <motion.button
+	              whileHover={{ x: 5 }}
+	              onMouseEnter={() => soundService.playHover()}
               onClick={() => {
                 soundService.playClick();
                 setShowDatabase(true);
@@ -804,9 +930,9 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-gray-400">
-                <Globe2 className="h-3.5 w-3.5 shrink-0" />
-                <div className="flex border border-black/10 bg-white/90 backdrop-blur-sm">
+	              <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-gray-400">
+	                <Globe2 className="h-3.5 w-3.5 shrink-0" />
+	                <div className="flex border border-black/10 bg-white/90 backdrop-blur-sm">
                   <button
                     onClick={() => setLanguage("en")}
                     className={`px-3 py-1 transition-colors ${language === "en" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
@@ -819,9 +945,22 @@ export default function App() {
                   >
                     {text.chinese}
                   </button>
-                </div>
-              </div>
-            </div>
+	              </div>
+	            </div>
+	            <div className="mt-3 flex items-center justify-between gap-3 pointer-events-auto">
+	              <p className="min-w-0 truncate font-mono text-[9px] uppercase tracking-[0.18em] text-gray-400">
+	                {currentBase ? `${text.currentBaseReady} // ${currentBase.label}` : text.currentBaseMissing}
+	              </p>
+	              <button
+	                onClick={locateCurrentBase}
+	                disabled={currentBaseLoading}
+	                className="inline-flex items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-black disabled:text-gray-300"
+	              >
+	                {currentBaseLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+	                {text.refreshCurrentBase}
+	              </button>
+	            </div>
+	          </div>
           </div>
 
           <motion.div

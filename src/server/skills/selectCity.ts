@@ -4,6 +4,8 @@ interface RankedCity {
   city: CityMappingRecord;
   minuteDiffToEight: number;
   isRecentlyUsed: boolean;
+  latitudeDiffFromTarget: number;
+  timeBand: number;
 }
 
 function getLocalMinutesFromUtcOffset(nowUtcIso: string, utcOffset: number): number {
@@ -36,20 +38,84 @@ function getMinuteDiffToEight(nowUtcIso: string, city: CityMappingRecord): numbe
   return Math.abs(normalizedMinutes - targetMinutes);
 }
 
+function getMinuteTimeBand(minuteDiffToEight: number): number {
+  if (minuteDiffToEight <= 30) {
+    return 0;
+  }
+
+  if (minuteDiffToEight <= 60) {
+    return 1;
+  }
+
+  if (minuteDiffToEight <= 120) {
+    return 2;
+  }
+
+  return 3;
+}
+
+function getSphericalDistanceDegrees(currentBaseLocalMinute: number): number {
+  return (Math.max(0, Math.min(currentBaseLocalMinute, 59)) / 59) * 180;
+}
+
+function normalizeLatitudeAfterArc(latitude: number): number {
+  let next = latitude;
+
+  while (next > 90 || next < -90) {
+    if (next > 90) {
+      next = 180 - next;
+      continue;
+    }
+
+    next = -180 - next;
+  }
+
+  return next;
+}
+
+function getTargetLatitude(input: Pick<SelectCityInput, "currentBaseLatitude" | "currentBaseLocalDate" | "currentBaseLocalMinute">): number | null {
+  if (
+    typeof input.currentBaseLatitude !== "number" ||
+    typeof input.currentBaseLocalMinute !== "number" ||
+    !input.currentBaseLocalDate
+  ) {
+    return null;
+  }
+
+  const day = Number(input.currentBaseLocalDate.split("-")[2] ?? "0");
+  if (!Number.isFinite(day) || day <= 0) {
+    return null;
+  }
+
+  const distanceDegrees = getSphericalDistanceDegrees(input.currentBaseLocalMinute);
+  const signedDistance = day % 2 === 1 ? distanceDegrees : -distanceDegrees;
+
+  return normalizeLatitudeAfterArc(input.currentBaseLatitude + signedDistance);
+}
+
 function rankCities(input: SelectCityInput): RankedCity[] {
   const recentCityNames = new Set(
     input.recentRecords.slice(0, 7).map((record) => record.city.toLowerCase()),
   );
+  const targetLatitude = getTargetLatitude(input);
 
   return input.cities.map((city) => ({
     city,
     minuteDiffToEight: getMinuteDiffToEight(input.nowUtcIso, city),
     isRecentlyUsed: recentCityNames.has(city.city.toLowerCase()),
+    latitudeDiffFromTarget: targetLatitude === null ? Infinity : Math.abs(city.latitude - targetLatitude),
+    timeBand: getMinuteTimeBand(getMinuteDiffToEight(input.nowUtcIso, city)),
   }));
 }
 
 export function selectCity(input: SelectCityInput): SelectCityResult {
   const rankedCities = rankCities(input).sort((left, right) => {
+    if (left.timeBand !== right.timeBand) {
+      return left.timeBand - right.timeBand;
+    }
+    if (left.latitudeDiffFromTarget !== right.latitudeDiffFromTarget) {
+      return left.latitudeDiffFromTarget - right.latitudeDiffFromTarget;
+    }
     if (left.minuteDiffToEight !== right.minuteDiffToEight) {
       return left.minuteDiffToEight - right.minuteDiffToEight;
     }

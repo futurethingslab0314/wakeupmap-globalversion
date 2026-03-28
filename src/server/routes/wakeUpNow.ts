@@ -41,6 +41,9 @@ export function createWakeUpNowHandler(dependencies: WakeUpNowHandlerDependencie
         ...(body.nowUtcIso ? { nowUtcIso: body.nowUtcIso } : {}),
         ...(body.clientTimeZone ? { clientTimeZone: body.clientTimeZone } : {}),
         ...(body.clientIsoTime ? { clientIsoTime: body.clientIsoTime } : {}),
+        ...(body.currentBase ? { currentBase: body.currentBase } : {}),
+        ...(typeof body.currentBaseLatitude === "number" ? { currentBaseLatitude: body.currentBaseLatitude } : {}),
+        ...(typeof body.currentBaseLongitude === "number" ? { currentBaseLongitude: body.currentBaseLongitude } : {}),
       });
 
       response.status(200).json(result);
