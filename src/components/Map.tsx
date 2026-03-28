@@ -17,7 +17,7 @@ import {
 } from "../mapSelection";
 import { getMapOverlayScale, getStableSvgSize, normalizeViewportSize } from "../mapOverlayScale";
 import { getGreetingBubbleHitArea, getMarkerLabelHitArea, getWakeupBubbleHitArea } from "../mapHitTargets";
-import { buildVisibleLiftedArcPath } from "../mapArcs";
+import { buildVisibleLiftedArcSegments, toSvgPath } from "../mapArcs";
 import { motion } from "motion/react";
 import { geoOrthographic } from "d3-geo";
 import { soundService } from "../services/soundService";
@@ -341,33 +341,40 @@ const Map: React.FC<MapProps> = ({
             {sortedRecords.map((record, index) => {
               if (index === 0) return null;
               const prev = sortedRecords[index - 1];
-              const path = buildVisibleLiftedArcPath({
+              const segments = buildVisibleLiftedArcSegments({
                 start: { lon: prev.longitude, lat: prev.latitude },
                 end: { lon: record.longitude, lat: record.latitude },
                 projection,
                 isVisible,
               });
 
-              if (!path) {
+              if (segments.length === 0) {
                 return null;
               }
 
-              return (
-                <motion.path
-                  key={`arc-${record.id}`}
-                  initial={{ pathLength: 0, opacity: 0 }}
-                  animate={{ pathLength: 1, opacity: 0.3 }}
-                  transition={{ 
-                    duration: 2.5, 
-                    delay: index * 0.05,
-                    ease: "easeInOut"
-                  }}
-                  d={path}
-                  fill="none"
-                  stroke="#000"
-                  strokeWidth={0.4}
-                />
-              );
+              return segments.map((segment, segmentIndex) => {
+                const path = toSvgPath(segment);
+                if (!path) {
+                  return null;
+                }
+
+                return (
+                  <motion.path
+                    key={`arc-${record.id}-${segmentIndex}`}
+                    initial={{ pathLength: 0, opacity: 0 }}
+                    animate={{ pathLength: 1, opacity: 0.3 }}
+                    transition={{ 
+                      duration: 2.5, 
+                      delay: index * 0.05,
+                      ease: "easeInOut"
+                    }}
+                    d={path}
+                    fill="none"
+                    stroke="#000"
+                    strokeWidth={0.4}
+                  />
+                );
+              });
             })}
           </g>
         )}
