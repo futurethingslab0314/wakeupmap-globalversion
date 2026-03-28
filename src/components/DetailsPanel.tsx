@@ -3,6 +3,7 @@ import { NotionRecord } from "../types";
 import { getRecordCity, getRecordCountry, getRecordRecipe, getRecordStory, uiText, UiLanguage } from "../i18n";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Coffee, Globe2, Layers, RefreshCw } from "lucide-react";
+import { getBreakfastImageFrameClassName } from "../detailsPanelStyles";
 import { isRecordPreparing } from "../recordSync";
 import { getCityVisitCount, getCountryVisitStats } from "../mapSelection";
 
@@ -164,7 +165,7 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({
                   </section>
 
                   {/* Image Section */}
-                  <div className="relative aspect-[4/3] grayscale hover:grayscale-0 transition-all duration-700 border border-black/5">
+                  <div className={getBreakfastImageFrameClassName()}>
                     {record.imageUrl ? (
                       <img
                         src={record.imageUrl}
