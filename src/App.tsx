@@ -6,7 +6,7 @@ import { NotionRecord, WakeUpNowResponse } from "./types";
 import { getIdentityPresenceState, getInitialIdentityState, normalizeIdentityName } from "./entryState";
 import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
 import { getHeaderAnimationState, getLanguageToggleState, getMobileNavVisibility, getMobileView } from "./layoutState";
-import { isRecordPreparing } from "./recordSync";
+import { getCompletedRecordFromSnapshot, isRecordPreparing } from "./recordSync";
 import {
   filterRecordsForUser,
   getLatestRecord,
@@ -48,6 +48,8 @@ export default function App() {
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [currentBase, setCurrentBase] = useState<CurrentBaseState | null>(null);
   const [currentBaseLoading, setCurrentBaseLoading] = useState(false);
+  const [pendingBreakfastRecords, setPendingBreakfastRecords] = useState<NotionRecord[] | null>(null);
+  const [readyBreakfastRecordId, setReadyBreakfastRecordId] = useState<string | null>(null);
   const [userName, setUserName] = useState(bootIdentityState.userName);
   const [isNameConfirmed, setIsNameConfirmed] = useState(bootIdentityState.isNameConfirmed);
   const [showEntryScreen, setShowEntryScreen] = useState(bootIdentityState.shouldShowEntryScreen);
@@ -89,6 +91,7 @@ export default function App() {
     return filterRecordsForUser(records, userName);
   }, [records, isNameConfirmed, userName]);
   const showIdentityEmptyState = isNameConfirmed && !loading && visibleRecords.length === 0 && !showWakeupToday;
+  const hasReadyBreakfastRefresh = !!selectedRecord && readyBreakfastRecordId === selectedRecord.id;
 
   const sortedRecords = React.useMemo(() => {
     return getRecordsSortedByRecordedAt(visibleRecords);
@@ -169,28 +172,90 @@ export default function App() {
     setRotation([-latestRecord.longitude, -latestRecord.latitude, 0]);
   }, [currentViewState, visibleRecords]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const loadRecordsSnapshot = useCallback(async (): Promise<NotionRecord[]> => {
+    const response = await fetch("/api/notion-data", {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.error ?? "Failed to fetch data");
+    }
+
+    return response.json();
+  }, []);
+
+  const fetchData = useCallback(async (options?: { showLoading?: boolean }) => {
+    const showLoading = options?.showLoading ?? true;
+
+    if (showLoading) {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const response = await fetch("/api/notion-data", {
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-store",
-        },
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new Error(payload?.error ?? "Failed to fetch data");
-      }
-      const data = await response.json();
+      const data = await loadRecordsSnapshot();
       setRecords(data);
+      return data;
     } catch (err: any) {
       setError(err.message);
+      throw err;
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
-  }, []);
+  }, [loadRecordsSnapshot]);
+
+  const checkBreakfastReadiness = useCallback(async (targetRecord?: NotionRecord | null) => {
+    const recordToCheck = targetRecord ?? selectedRecord;
+    if (!recordToCheck || !isRecordPreparing(recordToCheck, language)) {
+      return null;
+    }
+
+    try {
+      const nextRecords = await loadRecordsSnapshot();
+      const completedRecord = getCompletedRecordFromSnapshot(recordToCheck, nextRecords, language);
+      if (!completedRecord) {
+        return null;
+      }
+
+      setPendingBreakfastRecords(nextRecords);
+      setReadyBreakfastRecordId(completedRecord.id);
+      return completedRecord;
+    } catch (err) {
+      console.error("Breakfast readiness check failed:", err);
+      return null;
+    }
+  }, [language, loadRecordsSnapshot, selectedRecord]);
+
+  const refreshReadyBreakfast = useCallback(async () => {
+    if (!selectedRecord) {
+      return;
+    }
+
+    if (pendingBreakfastRecords && readyBreakfastRecordId === selectedRecord.id) {
+      setRecords(pendingBreakfastRecords);
+      const nextSelectedRecord = pendingBreakfastRecords.find((record) => record.id === selectedRecord.id) ?? null;
+      if (nextSelectedRecord) {
+        setSelectedRecord(nextSelectedRecord);
+      }
+      setPendingBreakfastRecords(null);
+      setReadyBreakfastRecordId(null);
+      return;
+    }
+
+    try {
+      const nextRecords = await fetchData({ showLoading: false });
+      const nextSelectedRecord = nextRecords?.find((record) => record.id === selectedRecord.id) ?? null;
+      if (nextSelectedRecord) {
+        setSelectedRecord(nextSelectedRecord);
+      }
+    } catch {
+      // fetchData already reports the error state
+    }
+  }, [fetchData, pendingBreakfastRecords, readyBreakfastRecordId, selectedRecord]);
 
   const locateCurrentBase = useCallback(() => {
     if (typeof window === "undefined" || typeof navigator === "undefined") {
@@ -290,6 +355,8 @@ export default function App() {
 
       if (payload?.record) {
         setSelectedRecord(payload.record);
+        setPendingBreakfastRecords(null);
+        setReadyBreakfastRecordId(null);
         setRecords((current) => {
           const withoutCurrent = current.filter((record) => record.id !== payload?.record.id);
           return [payload.record, ...withoutCurrent];
@@ -313,14 +380,14 @@ export default function App() {
               return;
             }
 
-            await fetchData();
+            await checkBreakfastReadiness(payload?.record ?? null);
           })
           .catch((imageError) => {
             console.error("Wake Up image generation failed:", imageError);
           });
       }
 
-      void fetchData();
+      void fetchData({ showLoading: false });
       soundService.playSuccess();
     } catch (err: any) {
       setError(err.message);
@@ -391,39 +458,32 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedRecord || !isRecordPreparing(selectedRecord, language)) {
+      setPendingBreakfastRecords(null);
+      setReadyBreakfastRecordId(null);
       return;
     }
 
-    let cancelled = false;
-    const intervalId = window.setInterval(() => {
-      if (cancelled) {
-        return;
-      }
-      void fetchData();
-    }, 4000);
-
-    const timeoutId = window.setTimeout(() => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    }, 60000);
+    const timeoutIds = [10000, 25000].map((delay) =>
+      window.setTimeout(() => {
+        void checkBreakfastReadiness(selectedRecord);
+      }, delay),
+    );
 
     return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-      window.clearTimeout(timeoutId);
+      timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
     };
-  }, [selectedRecord, language, fetchData]);
+  }, [checkBreakfastReadiness, language, selectedRecord]);
 
   useEffect(() => {
     const handleVisibilityRefresh = () => {
       if (document.visibilityState === "visible" && selectedRecord && isRecordPreparing(selectedRecord, language)) {
-        void fetchData();
+        void checkBreakfastReadiness(selectedRecord);
       }
     };
 
     const handlePageShow = () => {
       if (selectedRecord && isRecordPreparing(selectedRecord, language)) {
-        void fetchData();
+        void checkBreakfastReadiness(selectedRecord);
       }
     };
 
@@ -434,7 +494,7 @@ export default function App() {
       document.removeEventListener("visibilitychange", handleVisibilityRefresh);
       window.removeEventListener("pageshow", handlePageShow);
     };
-  }, [selectedRecord, language, fetchData]);
+  }, [checkBreakfastReadiness, language, selectedRecord]);
 
   // Automatically find morning locations once records are loaded
   useEffect(() => {
@@ -1244,6 +1304,8 @@ export default function App() {
         group={selectedGroup}
         records={visibleRecords}
         language={language}
+        hasBreakfastRefreshReady={hasReadyBreakfastRefresh}
+        onRefreshBreakfast={hasReadyBreakfastRefresh ? refreshReadyBreakfast : undefined}
         onClose={() => {
           soundService.playClick();
           setSelectedRecord(null);

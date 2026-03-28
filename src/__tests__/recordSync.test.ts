@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { isRecordPreparing } from "../recordSync";
+import { getCompletedRecordFromSnapshot, isRecordPreparing } from "../recordSync";
 import type { NotionRecord } from "../types";
 
 function createRecord(overrides: Partial<NotionRecord> = {}): NotionRecord {
@@ -38,5 +38,27 @@ test("isRecordPreparing returns false once the localized recipe is available", (
   assert.equal(
     isRecordPreparing(createRecord({ recipe_zh: "食材：豆漿、油條。" }), "zh"),
     false,
+  );
+});
+
+test("getCompletedRecordFromSnapshot returns the refreshed record once recipe and image are available", () => {
+  const preparingRecord = createRecord();
+  const completedRecord = createRecord({
+    imageUrl: "https://cdn.example.com/taipei.png",
+    recipe: "Soy milk and youtiao.",
+  });
+
+  assert.deepEqual(
+    getCompletedRecordFromSnapshot(preparingRecord, [completedRecord], "en"),
+    completedRecord,
+  );
+});
+
+test("getCompletedRecordFromSnapshot ignores snapshots that are still preparing", () => {
+  const preparingRecord = createRecord();
+
+  assert.equal(
+    getCompletedRecordFromSnapshot(preparingRecord, [createRecord()], "en"),
+    null,
   );
 });

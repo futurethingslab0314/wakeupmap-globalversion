@@ -2,7 +2,7 @@ import React from "react";
 import { NotionRecord } from "../types";
 import { getRecordCity, getRecordCountry, getRecordRecipe, getRecordStory, uiText, UiLanguage } from "../i18n";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Coffee, Globe2, Layers } from "lucide-react";
+import { X, Coffee, Globe2, Layers, RefreshCw } from "lucide-react";
 import { isRecordPreparing } from "../recordSync";
 import { getCityVisitCount, getCountryVisitStats } from "../mapSelection";
 
@@ -13,9 +13,20 @@ interface DetailsPanelProps {
   records: NotionRecord[];
   language: UiLanguage;
   onClose: () => void;
+  hasBreakfastRefreshReady?: boolean;
+  onRefreshBreakfast?: () => void;
 }
 
-const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, country, group, records, language, onClose }) => {
+const DetailsPanel: React.FC<DetailsPanelProps> = ({
+  record,
+  country,
+  group,
+  records,
+  language,
+  onClose,
+  hasBreakfastRefreshReady = false,
+  onRefreshBreakfast,
+}) => {
   if (!record && !country && !group) return null;
   const text = uiText[language];
   const isBreakfastPreparing = isRecordPreparing(record, language);
@@ -165,9 +176,20 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, country, group, rec
                       <div className="w-full h-full bg-gray-50 flex flex-col items-center justify-center gap-4 text-center px-8">
                         <Coffee className="w-12 h-12 text-gray-200" />
                         {isBreakfastPreparing ? (
-                          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-gray-400">
-                            {text.preparingBreakfast}
-                          </p>
+                          <div className="flex flex-col items-center gap-3">
+                            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-gray-400">
+                              {text.preparingBreakfast}
+                            </p>
+                            {hasBreakfastRefreshReady && onRefreshBreakfast ? (
+                              <button
+                                onClick={onRefreshBreakfast}
+                                className="inline-flex items-center gap-2 border border-black px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-black transition-colors hover:bg-black hover:text-white"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                                {text.breakfastReady}
+                              </button>
+                            ) : null}
+                          </div>
                         ) : null}
                       </div>
                     )}
@@ -187,6 +209,15 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({ record, country, group, rec
                     <div className="font-mono text-sm text-gray-600 leading-relaxed whitespace-pre-wrap border-l border-black/5 pl-6">
                       {getRecordRecipe(record, language) || text.preparingBreakfast}
                     </div>
+                    {isBreakfastPreparing && hasBreakfastRefreshReady && onRefreshBreakfast ? (
+                      <button
+                        onClick={onRefreshBreakfast}
+                        className="inline-flex items-center gap-2 border border-black px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-black transition-colors hover:bg-black hover:text-white"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        {text.refreshBreakfast}
+                      </button>
+                    ) : null}
                   </section>
                 </>
               ) : (
