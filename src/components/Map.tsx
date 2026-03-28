@@ -17,6 +17,7 @@ import {
 } from "../mapSelection";
 import { getMapOverlayScale, getStableSvgSize, normalizeViewportSize } from "../mapOverlayScale";
 import { getGreetingBubbleHitArea, getMarkerLabelHitArea, getWakeupBubbleHitArea } from "../mapHitTargets";
+import { buildVisibleLiftedArcPath } from "../mapArcs";
 import { motion } from "motion/react";
 import { geoOrthographic } from "d3-geo";
 import { soundService } from "../services/soundService";
@@ -340,26 +341,16 @@ const Map: React.FC<MapProps> = ({
             {sortedRecords.map((record, index) => {
               if (index === 0) return null;
               const prev = sortedRecords[index - 1];
-              
-              if (!isVisible(prev.longitude, prev.latitude) || !isVisible(record.longitude, record.latitude)) {
+              const path = buildVisibleLiftedArcPath({
+                start: { lon: prev.longitude, lat: prev.latitude },
+                end: { lon: record.longitude, lat: record.latitude },
+                projection,
+                isVisible,
+              });
+
+              if (!path) {
                 return null;
               }
-
-              const p1 = projection([prev.longitude, prev.latitude]);
-              const p2 = projection([record.longitude, record.latitude]);
-              
-              if (!p1 || !p2) return null;
-
-              const midX = (p1[0] + p2[0]) / 2;
-              const midY = (p1[1] + p2[1]) / 2;
-              const centerX = 400;
-              const centerY = 300;
-              const vx = midX - centerX;
-              const vy = midY - centerY;
-              
-              const factor = 0.8; 
-              const cpX = midX + vx * factor;
-              const cpY = midY + vy * factor;
 
               return (
                 <motion.path
@@ -371,7 +362,7 @@ const Map: React.FC<MapProps> = ({
                     delay: index * 0.05,
                     ease: "easeInOut"
                   }}
-                  d={`M ${p1[0]} ${p1[1]} Q ${cpX} ${cpY} ${p2[0]} ${p2[1]}`}
+                  d={path}
                   fill="none"
                   stroke="#000"
                   strokeWidth={0.4}
