@@ -10,6 +10,7 @@ import { getHeaderAnimationState, getLanguageToggleState, getMobileNavVisibility
 import {
   getMobileCurrentBaseLabelClassName,
   getMobileMainHeaderControlsClassName,
+  getMobileMainHeaderIdentityRowClassName,
   getMobileMainHeaderTitleClassName,
 } from "./mobileHeaderLayout";
 import { getCompletedRecordFromSnapshot, isRecordPreparing } from "./recordSync";
@@ -967,7 +968,7 @@ export default function App() {
         <>
           <div className="absolute inset-x-0 safe-top-offset z-50 px-5 pt-3 pointer-events-none">
             <div className={getMobileMainHeaderControlsClassName()}>
-              <div className="pointer-events-auto flex items-start justify-between gap-4">
+              <div className={getMobileMainHeaderIdentityRowClassName()}>
                 <div className="min-w-0">
                   <div className="mb-1 flex items-center gap-2">
                     <div className="h-1.5 w-1.5 rounded-full bg-accent-neon" />
@@ -996,9 +997,7 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-              </div>
 
-              <div className="pointer-events-auto flex flex-col gap-3 border border-black/10 bg-white/90 p-3 backdrop-blur-sm">
                 <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-gray-400">
                   <Globe2 className="h-3.5 w-3.5 shrink-0" />
                   <div className="flex border border-black/10 bg-white/90">
@@ -1016,6 +1015,9 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+              </div>
+
+              <div className="pointer-events-auto flex flex-col gap-3 border border-black/10 bg-white/90 p-3 backdrop-blur-sm">
                 <p className={getMobileCurrentBaseLabelClassName()}>
                   {currentBase ? `${text.currentBaseReady} // ${currentBase.label}` : text.currentBaseMissing}
                 </p>

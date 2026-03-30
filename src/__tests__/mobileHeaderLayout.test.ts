@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   getMobileCurrentBaseLabelClassName,
   getMobileMainHeaderControlsClassName,
+  getMobileMainHeaderIdentityRowClassName,
   getMobileMainHeaderTitleClassName,
 } from "../mobileHeaderLayout";
 
@@ -18,6 +19,13 @@ test("mobile main header uses a stacked controls layout", () => {
   const className = getMobileMainHeaderControlsClassName();
 
   assert.match(className, /\bflex-col\b/);
+});
+
+test("mobile identity row keeps the identity block and language toggle on the same top layer", () => {
+  const className = getMobileMainHeaderIdentityRowClassName();
+
+  assert.match(className, /\bitems-start\b/);
+  assert.match(className, /\bjustify-between\b/);
 });
 
 test("mobile title block no longer relies on the old fixed top padding hack", () => {
