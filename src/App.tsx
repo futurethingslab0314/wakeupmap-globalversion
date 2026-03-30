@@ -7,6 +7,11 @@ import { getIdentityPresenceState, getInitialIdentityState, normalizeIdentityNam
 import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
 import { getJournalDateLabel } from "./journalTable";
 import { getHeaderAnimationState, getLanguageToggleState, getMobileNavVisibility, getMobileView } from "./layoutState";
+import {
+  getMobileCurrentBaseLabelClassName,
+  getMobileMainHeaderControlsClassName,
+  getMobileMainHeaderTitleClassName,
+} from "./mobileHeaderLayout";
 import { getCompletedRecordFromSnapshot, isRecordPreparing } from "./recordSync";
 import {
   filterRecordsForUser,
@@ -961,83 +966,85 @@ export default function App() {
       {isMobileMainView && (
         <>
           <div className="absolute inset-x-0 safe-top-offset z-50 px-5 pt-3 pointer-events-none">
-            <div className="pointer-events-auto flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <div className="mb-1 flex items-center gap-2">
-                  <div className="h-1.5 w-1.5 rounded-full bg-accent-neon" />
-                  <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-gray-400">
-                    {text.operatorIdentity}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="truncate font-mono text-sm font-bold uppercase tracking-[0.2em] text-black">
-                    {userName}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setIsNameConfirmed(false);
-                      setShowEntryScreen(true);
-                      setShowWakeupToday(false);
-                      setShowDatabase(false);
-                      setSelectedRecord(null);
-                      setSelectedCountry(null);
-                      setSelectedGroup(null);
-                      setHighlightedIds([]);
-                    }}
-                    className="border border-black/10 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-gray-400 transition-colors hover:text-black"
-                  >
-                    {text.edit}
-                  </button>
+            <div className={getMobileMainHeaderControlsClassName()}>
+              <div className="pointer-events-auto flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="mb-1 flex items-center gap-2">
+                    <div className="h-1.5 w-1.5 rounded-full bg-accent-neon" />
+                    <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-gray-400">
+                      {text.operatorIdentity}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="truncate font-mono text-sm font-bold uppercase tracking-[0.2em] text-black">
+                      {userName}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setIsNameConfirmed(false);
+                        setShowEntryScreen(true);
+                        setShowWakeupToday(false);
+                        setShowDatabase(false);
+                        setSelectedRecord(null);
+                        setSelectedCountry(null);
+                        setSelectedGroup(null);
+                        setHighlightedIds([]);
+                      }}
+                      className="border border-black/10 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-gray-400 transition-colors hover:text-black"
+                    >
+                      {text.edit}
+                    </button>
+                  </div>
                 </div>
               </div>
 
-	              <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-gray-400">
-	                <Globe2 className="h-3.5 w-3.5 shrink-0" />
-	                <div className="flex border border-black/10 bg-white/90 backdrop-blur-sm">
-                  <button
-                    onClick={() => setLanguage("en")}
-                    className={`px-3 py-1 transition-colors ${language === "en" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
-                  >
-                    {text.english}
-                  </button>
-                  <button
-                    onClick={() => setLanguage("zh")}
-                    className={`px-3 py-1 transition-colors ${language === "zh" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
-                  >
-                    {text.chinese}
-                  </button>
-	              </div>
-	            </div>
-	            <div className="mt-3 flex items-center justify-between gap-3 pointer-events-auto">
-	              <p className="min-w-0 truncate font-mono text-[9px] uppercase tracking-[0.18em] text-gray-400">
-	                {currentBase ? `${text.currentBaseReady} // ${currentBase.label}` : text.currentBaseMissing}
-	              </p>
-	              <button
-	                onClick={locateCurrentBase}
-	                disabled={currentBaseLoading}
-	                className="inline-flex items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-black disabled:text-gray-300"
-	              >
-	                {currentBaseLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-	                {text.refreshCurrentBase}
-	              </button>
-	            </div>
-	          </div>
-          </div>
+              <div className="pointer-events-auto flex flex-col gap-3 border border-black/10 bg-white/90 p-3 backdrop-blur-sm">
+                <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-gray-400">
+                  <Globe2 className="h-3.5 w-3.5 shrink-0" />
+                  <div className="flex border border-black/10 bg-white/90">
+                    <button
+                      onClick={() => setLanguage("en")}
+                      className={`px-3 py-1 transition-colors ${language === "en" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
+                    >
+                      {text.english}
+                    </button>
+                    <button
+                      onClick={() => setLanguage("zh")}
+                      className={`px-3 py-1 transition-colors ${language === "zh" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
+                    >
+                      {text.chinese}
+                    </button>
+                  </div>
+                </div>
+                <p className={getMobileCurrentBaseLabelClassName()}>
+                  {currentBase ? `${text.currentBaseReady} // ${currentBase.label}` : text.currentBaseMissing}
+                </p>
+                <button
+                  onClick={locateCurrentBase}
+                  disabled={currentBaseLoading}
+                  className="inline-flex w-fit items-center gap-2 border border-black/10 bg-white px-3 py-2 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-black disabled:text-gray-300"
+                >
+                  {currentBaseLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  {text.refreshCurrentBase}
+                </button>
+              </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="absolute inset-x-0 safe-top-offset z-40 px-5 pt-[72px] pointer-events-none"
-          >
-            <div className="space-y-2">
-              <h1 className="text-4xl font-sans font-bold uppercase leading-none tracking-tight text-black">
-                {text.entryTitle}
-              </h1>
-              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-black/70">
-                {visibleRecords.length} {text.locationsDiscovered}
-              </p>
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={getMobileMainHeaderTitleClassName()}
+              >
+                <div className="space-y-2">
+                  <h1 className="text-4xl font-sans font-bold uppercase leading-none tracking-tight text-black">
+                    {text.entryTitle}
+                  </h1>
+                  <p className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-black/70">
+                    {visibleRecords.length} {text.locationsDiscovered}
+                  </p>
+                </div>
+              </motion.div>
             </div>
-          </motion.div>
+          </div>
 
           <div className="fixed inset-x-0 z-[95] px-4 pointer-events-none mobile-mode-tabs-fixed">
             <div className="pointer-events-auto flex gap-2">
