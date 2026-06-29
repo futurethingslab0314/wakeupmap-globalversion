@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>WakeUpHere - Cyber Map Alarm Console</title>
+  
+  <!-- Preconnect and import cyber fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+
+  <!-- Leaflet Map CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  
+  <!-- Leaflet Map JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="./cities_data.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'accent-neon': '#45e945',
+          },
+          fontFamily: {
+            mono: ['"JetBrains Mono"', 'monospace'],
+            sans: ['"Inter"', 'sans-serif'],
+            display: ['"Space Grotesk"', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Full dark theme for Leaflet map */
+    .leaflet-container {
+      background: #020202 !important;
+    }
+    /* Hide default Leaflet controls to keep the HUD super clean */
+    .leaflet-control-zoom, .leaflet-control-attribution {
+      display: none !important;
+    }
+
+    /* Scanline overlay effect to make it look like a physical CRT/LCD display */
+    .scanlines {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: linear-gradient(
+        rgba(18, 16, 16, 0) 50%, 
+        rgba(0, 0, 0, 0.25) 50%
+      ), linear-gradient(
+        90deg,
+        rgba(255, 0, 0, 0.04),
+        rgba(0, 255, 0, 0.01),
+        rgba(0, 0, 255, 0.04)
+      );
+      background-size: 100% 3px, 3px 100%;
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    /* Cyber pulsing animations */
+    @keyframes cyber-pulse {
+      0% { transform: scale(0.9); opacity: 0.8; }
+      50% { transform: scale(1.3); opacity: 0.3; }
+      100% { transform: scale(0.9); opacity: 0.8; }
+    }
+    .cyber-pulse-style {
+      animation: cyber-pulse 2s infinite ease-in-out;
+    }
+
+    @keyframes text-blink {
+      0%, 100% { opacity: 1; text-shadow: 0 0 10px rgba(69, 233, 69, 0.8); }
+      50% { opacity: 0.3; text-shadow: none; }
+    }
+    .text-blink-style {
+      animation: text-blink 1.5s infinite ease-in-out;
+    }
+
+    /* Custom circular frame cropping */
+    .circle-screen-container {
+      border-radius: 50%;
+      mask-image: radial-gradient(circle, white 100%, black 100%);
+      -webkit-mask-image: -webkit-radial-gradient(circle, white 100%, black 100%);
+    }
+
+    /* Orbiting co-wakers keyframes and classes */
+    @keyframes orbit-and-fade {
+      0% {
+        transform: translate(-50%, -50%) rotate(0deg) translateY(var(--orbit-radius));
+      }
+      100% {
+        transform: translate(-50%, -50%) rotate(360deg) translateY(var(--orbit-radius));
+      }
+    }
+    .orbit-parent {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+      z-index: 15;
+    }
+    .orbit-child {
+      position: absolute;
+      pointer-events: none;
+      animation: orbit-and-fade var(--orbit-duration) linear infinite;
+      animation-delay: var(--orbit-delay);
+    }
+    .orbit-text {
+      display: inline-block;
+      white-space: nowrap;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 2.8vmin;
+      font-weight: bold;
+      color: #45e945;
+      background-color: rgba(2, 2, 2, 0.85);
+      border: 1px solid rgba(69, 233, 69, 0.45);
+      padding: 0.4vmin 1.2vmin;
+      border-radius: 0.8vmin;
+      box-shadow: 0 0 8px rgba(69, 233, 69, 0.35);
+      pointer-events: none;
+    }
+
+    /* Synchronized Radar-Ping Bouncing Animation */
+    @keyframes ringing-bounce {
+      0% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 5px rgba(69, 233, 69, 0.5));
+      }
+      10% {
+        transform: scale(1.6);
+        filter: drop-shadow(0 0 25px rgba(69, 233, 69, 1));
+      }
+      20% {
+        transform: scale(1.1);
+        filter: drop-shadow(0 0 10px rgba(69, 233, 69, 0.7));
+      }
+      25% {
+        transform: scale(1.4);
+        filter: drop-shadow(0 0 20px rgba(69, 233, 69, 0.9));
+      }
+      35% {
+        transform: scale(1.05);
+        filter: drop-shadow(0 0 8px rgba(69, 233, 69, 0.6));
+      }
+      40% {
+        transform: scale(1.25);
+        filter: drop-shadow(0 0 15px rgba(69, 233, 69, 0.8));
+      }
+      50%, 100% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 5px rgba(69, 233, 69, 0.4));
+      }
+    }
+    .ringing-active-point {
+      animation: ringing-bounce 2.4s infinite ease-out;
+    }
+  </style>
+</head>
+<body class="bg-[#020202] text-white flex items-center justify-center min-h-screen select-none overflow-hidden p-0 m-0">
+
+  <!-- MAIN CIRCULAR SCREEN VIEWPORT (Centered Max Perfect Circle, No bezel container) -->
+  <div id="main-circle-viewport" class="relative w-[98vmin] h-[98vmin] aspect-square rounded-full border-4 border-[#45e945]/40 shadow-[0_0_35px_rgba(69,233,69,0.25)] overflow-hidden bg-black flex flex-col items-center justify-center">
+    
+    <!-- Physical CRT Scanlines overlay -->
+    <div class="scanlines rounded-full"></div>
+        
+        <!-- ================= STAGE 1: SELECTION MAP SCREEN ================= -->
+        <div id="selection-screen" class="absolute inset-0 flex flex-col z-0">
+          <!-- Leaflet Map Container -->
+          <div id="map" class="w-full h-full z-0"></div>
+
+          <!-- Wrap all interactive/HUD selection elements in an overlay container that can be toggled -->
+          <div id="selection-overlays" class="absolute inset-0 z-10">
+            <!-- Fixed Circular Center Crosshair Point -->
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <!-- Central Concentric target target pointer -->
+              <div class="relative flex items-center justify-center">
+                <div class="w-10 h-10 border-2 border-[#45e945] rounded-full cyber-pulse-style absolute"></div>
+                <div class="w-5 h-5 border border-[#45e945] rounded-full absolute"></div>
+                <div class="w-1.5 h-1.5 bg-[#45e945] rounded-full absolute"></div>
+                <!-- Vertical Cross line -->
+                <div class="w-[1px] h-14 bg-[#45e945]/60 absolute"></div>
+                <!-- Horizontal Cross line -->
+                <div class="w-14 h-[1px] bg-[#45e945]/60 absolute"></div>
+              </div>
+            </div>
+
+            <!-- Dynamic Selection Guide Overlay HUD (Top) -->
+            <div class="absolute top-8 inset-x-0 mx-auto w-4/5 bg-black/85 border border-[#45e945]/40 px-3 py-2 rounded text-center pointer-events-none shadow-lg">
+              <div id="stage-label" class="text-[#45e945] font-mono text-xs font-bold uppercase tracking-[0.15em]">
+                STAGE 0 // SELECT CONTINENT
+              </div>
+              <div id="target-selection-name" class="text-base font-display font-bold mt-1 text-white uppercase">
+                ASIA (亞洲)
+              </div>
+            </div>
+
+            <!-- Manual Selection Cycle Controls removed as requested -->
+
+            <!-- Zoom level indicators overlay (Right) -->
+            <div class="absolute right-6 top-1/3 flex flex-col gap-1.5">
+              <button id="zoom-in-btn" class="w-8 h-8 bg-black/85 border border-white/20 hover:border-[#45e945] hover:text-[#45e945] text-white text-sm font-mono font-bold rounded-full flex items-center justify-center active:scale-95 transition-all shadow pointer-events-auto">
+                ＋
+              </button>
+              <button id="zoom-out-btn" class="w-8 h-8 bg-black/85 border border-white/20 hover:border-[#45e945] hover:text-[#45e945] text-white text-sm font-mono font-bold rounded-full flex items-center justify-center active:scale-95 transition-all shadow pointer-events-auto">
+                －
+              </button>
+              <div id="zoom-level-badge" class="bg-black/90 border border-[#45e945]/30 text-[#45e945] font-mono text-[9px] px-1 py-0.5 rounded text-center uppercase">
+                LV_1
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= STAGE 2: ALARM CLOCK SCREEN ================= -->
+        <div id="alarm-screen" class="hidden absolute inset-0 bg-[#020202]/50 flex flex-col items-center justify-center p-[5vmin] text-center z-20">
+          <!-- Orbiting Co-wakers runway along edge -->
+          <div id="alarm-orbit-runway" class="absolute inset-0 pointer-events-none z-0 overflow-hidden rounded-full"></div>
+
+          <!-- Animated Radar Scan Backing -->
+          <div class="absolute inset-0 bg-[radial-gradient(rgba(0,255,0,0.06)_1px,transparent_100%)] bg-[size:16px_16px] pointer-events-none"></div>
+
+          <!-- Status indicator -->
+          <div class="flex items-center gap-[1.5vmin] mb-[3vmin] z-10">
+            <span class="w-[1.8vmin] h-[1.8vmin] bg-[#45e945] rounded-full animate-ping"></span>
+            <span id="alarm-status-label" class="font-mono text-[2.2vmin] md:text-[2.4vmin] text-[#45e945] uppercase tracking-[0.2em] font-bold">ALARM ACTIVE</span>
+          </div>
+
+          <!-- Central Dynamic Display Panel (City & Country in exact center) -->
+          <div class="z-10 my-[3vmin] flex flex-col items-center justify-center space-y-[2vmin]">
+            <!-- Label -->
+            <div id="alarm-center-label" class="text-[3vmin] md:text-[3.3vmin] font-mono text-[#45e945] uppercase tracking-[0.2em] font-bold">
+              預約甦醒位置
+            </div>
+
+            <div id="alarm-username" class="text-[2.5vmin] md:text-[2.7vmin] font-mono text-[#45e945]/80 uppercase tracking-[0.18em]">
+              YuPie
+            </div>
+            
+            <!-- City Name (Becomes the big centered display title) -->
+            <div id="alarm-city-name" class="text-[9.5vmin] md:text-[11vmin] font-display font-bold text-white tracking-wide uppercase leading-tight text-center drop-shadow-[0_0_15px_rgba(255,255,255,0.15)]">
+              TAIPEI
+            </div>
+
+            <!-- Country Name (Becomes the sub details) -->
+            <div id="alarm-country-name" class="text-[3.2vmin] md:text-[3.6vmin] font-mono text-gray-400 uppercase tracking-[0.15em] text-center">
+              TAIWAN // UTC +8
+            </div>
+          </div>
+
+          <!-- Dummy/Hidden display to prevent JS errors of background clocks -->
+          <div id="alarm-waking-time-display" class="hidden"></div>
+
+          <!-- City Story / Introduction (No border or background color) -->
+          <div class="z-10 p-[2vmin] max-w-[75vmin] w-5/6 mx-auto my-[1.5vmin] mb-[3vmin]">
+            <div id="alarm-story-loading" class="text-[2.4vmin] md:text-[2.6vmin] font-mono text-[#45e945] animate-pulse">CONNECTING_STORY_CHANNEL...</div>
+            <p id="alarm-city-story" class="hidden text-[2.8vmin] md:text-[3.2vmin] font-sans text-gray-300 leading-relaxed font-semibold text-center line-clamp-3">
+              --
+            </p>
+          </div>
+        </div>
+
+        <!-- ================= STAGE 3: RESET CONFIRMATION PROMPT MODAL ================= -->
+        <div id="reset-confirm-modal" class="hidden absolute inset-0 bg-[#020202]/95 flex flex-col items-center justify-center z-30 p-[5vmin]">
+          <div class="border border-[#45e945]/30 bg-[#0c0c0c] p-[6vmin] rounded-2xl max-w-[70vmin] w-11/12 space-y-[4vmin] text-center shadow-[0_0_30px_rgba(69,233,69,0.15)]">
+            <div class="text-[3.5vmin] md:text-[3.8vmin] font-mono text-[#45e945] tracking-[0.1em] uppercase font-bold">
+              系統訊息
+            </div>
+            <p class="text-[4vmin] md:text-[4.4vmin] font-sans text-white font-bold leading-normal">
+              重新預約甦醒位置嗎？
+            </p>
+            
+            <div class="flex items-center justify-center gap-[5vmin] pt-[2vmin]">
+              <!-- Yes Option -->
+              <div id="confirm-btn-yes" class="px-[5vmin] py-[2vmin] border-2 border-[#45e945] bg-[#45e945]/10 text-[#45e945] rounded-xl font-mono text-[3.2vmin] md:text-[3.6vmin] font-bold cursor-pointer transition-all uppercase tracking-wider scale-105 shadow-[0_0_15px_rgba(69,233,69,0.3)]">
+                [ YES ]
+              </div>
+              <!-- No Option -->
+              <div id="confirm-btn-no" class="px-[5vmin] py-[2vmin] border border-white/20 bg-transparent text-gray-400 rounded-xl font-mono text-[3.2vmin] md:text-[3.6vmin] font-bold cursor-pointer transition-all uppercase tracking-wider">
+                NO
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= STAGE 4: RINGING OVERLAY HUD ================= -->
+        <div id="ringing-overlay" class="hidden absolute inset-0 bg-transparent pointer-events-none flex flex-col items-center justify-between p-[6vmin] z-30">
+          <!-- Top flashing alert (Green background / Emerald styling) -->
+          <div class="w-11/12 bg-emerald-600/90 border-2 border-emerald-500 p-[3vmin] rounded-xl flex items-center justify-center gap-[2vmin] animate-pulse shadow-[0_0_20px_rgba(16,185,129,0.5)]">
+            <span class="w-[2.5vmin] h-[2.5vmin] bg-white rounded-full animate-ping"></span>
+            <span id="ringing-title" class="font-sans text-white text-[3.6vmin] font-bold tracking-wider uppercase">
+              ALARM ACTIVE // 已抵達！
+            </span>
+          </div>
+
+          <!-- Center space is empty so user can see the map and the bouncing city point perfectly -->
+          <div class="flex-1"></div>
+
+          <!-- Bottom Dismiss instructions (Black block, styled like the top banner block) -->
+          <div class="w-11/12 bg-black/95 border-2 border-gray-800 p-[3vmin] rounded-xl flex items-center justify-center gap-[2vmin] shadow-[0_0_20px_rgba(255,255,255,0.05)] pointer-events-auto">
+            <div id="ringing-city-subtitle" class="text-white font-sans text-[3.6vmin] font-bold tracking-wider uppercase text-center">
+              --
+            </div>
+          </div>
+        </div>
+
+  </div>
+
+  <script>
+    // --- Synth Sound Service using Web Audio API ---
+    class SoundService {
+      constructor() {
+        this.audioCtx = null;
+        this.enabled = true;
+        this.alarmInterval = null;
+      }
+
+      init() {
+        if (!this.audioCtx) {
+          this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (this.audioCtx.state === 'suspended') {
+          this.audioCtx.resume();
+        }
+      }
+
+      playClick() {
+        if (!this.enabled) return;
+        this.init();
+        const ctx = this.audioCtx;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(800, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.06);
+
+        gain.gain.setValueAtTime(0.08, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.06);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start();
+        osc.stop(ctx.currentTime + 0.06);
+      }
+
+      playSuccess() {
+        if (!this.enabled) return;
+        this.init();
+        const ctx = this.audioCtx;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08); // E5
+        osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.16); // G5
+
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+      }
+
+      startAlarmRinging() {
+        if (!this.enabled) return;
+        this.init();
+        if (this.alarmInterval) return;
+
+        const ctx = this.audioCtx;
+        
+        const triggerPing = (time, maxVolume, freq) => {
+          const osc1 = ctx.createOscillator();
+          const gainNode1 = ctx.createGain();
+          
+          osc1.type = 'sine';
+          // Smooth downward sweep for authentic radar/sonar feel
+          osc1.frequency.setValueAtTime(freq, time);
+          osc1.frequency.exponentialRampToValueAtTime(freq - 120, time + 0.2);
+          
+          gainNode1.gain.setValueAtTime(0.001, time);
+          gainNode1.gain.linearRampToValueAtTime(maxVolume, time + 0.02);
+          gainNode1.gain.exponentialRampToValueAtTime(0.001, time + 0.22);
+          
+          osc1.connect(gainNode1);
+          gainNode1.connect(ctx.destination);
+          
+          osc1.start(time);
+          osc1.stop(time + 0.25);
+        };
+
+        const playRadarPingPattern = () => {
+          const now = ctx.currentTime;
+          
+          // 3 discrete staccato "pings", each fading and softer than the last
+          triggerPing(now, 0.14, 660);        // Ping 1 (Strongest)
+          triggerPing(now + 0.35, 0.07, 660); // Ping 2 (Medium)
+          triggerPing(now + 0.70, 0.03, 660); // Ping 3 (Gentlest)
+        };
+
+        // Play immediately and loop every 2.4 seconds (giving ~1.45 seconds pause after the 3 pings)
+        playRadarPingPattern();
+        this.alarmInterval = setInterval(playRadarPingPattern, 2400);
+      }
+
+      stopAlarmRinging() {
+        if (this.alarmInterval) {
+          clearInterval(this.alarmInterval);
+          this.alarmInterval = null;
+        }
+      }
+    }
+
+    const sound = new SoundService();
+
+    // --- Dynamic Locations Preset Database ---
+    const CONTINENT_LABELS = {
+      antarctica: { name_zh: "南極洲", name_en: "Antarctica" },
+      africa: { name_zh: "非洲", name_en: "Africa" },
+      asia: { name_zh: "亞洲", name_en: "Asia" },
+      europe: { name_zh: "歐洲", name_en: "Europe" },
+      north_america: { name_zh: "北美洲", name_en: "North America" },
+      south_america: { name_zh: "南美洲", name_en: "South America" },
+      oceania: { name_zh: "大洋洲", name_en: "Oceania" },
+      unknown: { name_zh: "其他", name_en: "Other" }
+    };
+
+    const CONTINENT_CENTER = {
+      antarctica: [-80.0, 0.0],
+      africa: [1.0, 17.0],
+      asia: [34.0, 100.8],
+      europe: [50.0, 14.0],
+      north_america: [48.0, -100.0],
+      south_america: [-14.0, -59.0],
+      oceania: [-25.0, 134.0],
+      unknown: [0.0, 0.0]
+    };
+
+    function normalizeText(value) {
+      return (value || "")
+        .toString()
+        .trim()
+        .toLowerCase();
+    }
+
+    function slugify(value) {
+      return normalizeText(value)
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    }
+
+    function parseUtcOffset(timezone) {
+      if (!timezone || typeof timezone !== "string") return null;
+      const match = timezone.match(/([+-]\d{1,2})$/);
+      return match ? Number(match[1]) : null;
+    }
+
+    function formatLocalTimeForTimezone(timezone, fallbackOffset) {
+      const now = new Date();
+
+      if (timezone) {
+        try {
+          const formatter = new Intl.DateTimeFormat("en-US", {
+            timeZone: timezone,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: true
+          });
+          return formatter.format(now);
+        } catch (err) {
+          console.warn("Invalid timezone, falling back to UTC offset:", timezone, err);
+        }
+      }
+
+      const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const cityMs = utcMs + ((fallbackOffset || 0) * 3600000);
+      const cityDate = new Date(cityMs);
+
+      let hours = cityDate.getHours();
+      const minutes = cityDate.getMinutes();
+      const seconds = cityDate.getSeconds();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      const hoursStr = hours < 10 ? '0' + hours : hours;
+      const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+      const secondsStr = seconds < 10 ? '0' + seconds : seconds;
+      return `${hoursStr}:${minutesStr}:${secondsStr} ${ampm}`;
+    }
+
+    function inferContinentFromCoords(lat, lon) {
+      if (lat <= -60) return "antarctica";
+      if (lat >= -35 && lat <= 37 && lon >= -20 && lon <= 55) return "africa";
+      if (lat >= 35 && lon >= -25 && lon <= 60) return "europe";
+      if (lat >= 5 && lon >= 26 && lon <= 180) return "asia";
+      if (lat >= 5 && lon >= -168 && lon <= -30) return "north_america";
+      if (lat < 5 && lat >= -60 && lon >= -82 && lon <= -30) return "south_america";
+      if (lat < 5 && (lon >= 110 || lon <= -110)) return "oceania";
+      if (lat >= 5 && lon >= -30 && lon < 26) return "europe";
+      return "unknown";
+    }
+
+    let locationsByContinent = {};
+    let locationsByCountry = {};
+
+    function buildLocationHierarchy(locations) {
+      const continents = new Map();
+      const countries = new Map();
+
+      locations.forEach((loc) => {
+        const countryKey = slugify(loc.country || loc.country_zh || loc.country_iso_code || loc.city);
+        const cityNameEn = loc.city || loc.city_en || loc.city_zh || "Unknown city";
+        const cityNameZh = loc.city_zh || loc.city || cityNameEn;
+        const countryNameEn = loc.country || loc.country_en || loc.country_zh || "Unknown country";
+        const countryNameZh = loc.country_zh || loc.country || countryNameEn;
+        const continentKey = inferContinentFromCoords(Number(loc.latitude), Number(loc.longitude));
+
+        const city = {
+          name_zh: cityNameZh,
+          name_en: cityNameEn,
+          coords: [Number(loc.latitude), Number(loc.longitude)],
+          timezone: loc.timezone || null,
+          utcOffset: parseUtcOffset(loc.timezone),
+          raw: loc
+        };
+
+        if (!countries.has(countryKey)) {
+          countries.set(countryKey, {
+            id: countryKey,
+            name_zh: countryNameZh,
+            name_en: countryNameEn,
+            coords: city.coords,
+            continentId: continentKey,
+            cities: []
+          });
+        }
+
+        const country = countries.get(countryKey);
+        country.cities.push(city);
+        if (!country.coords && city.coords) {
+          country.coords = city.coords;
+        }
+
+        if (!continents.has(continentKey)) {
+          const label = CONTINENT_LABELS[continentKey] || CONTINENT_LABELS.unknown;
+          continents.set(continentKey, {
+            id: continentKey,
+            name_zh: label.name_zh,
+            name_en: label.name_en,
+            coords: CONTINENT_CENTER[continentKey] || CONTINENT_CENTER.unknown,
+            countries: []
+          });
+        }
+      });
+
+      countries.forEach((country) => {
+        const continent = continents.get(country.continentId) || continents.get("unknown");
+        if (continent) {
+          continent.countries.push(country);
+        }
+      });
+
+      const continentList = Array.from(continents.values())
+        .filter(continent => continent.countries.length > 0)
+        .sort((a, b) => a.name_en.localeCompare(b.name_en));
+
+      continentList.forEach((continent) => {
+        continent.countries.sort((a, b) => a.name_en.localeCompare(b.name_en));
+      });
+
+      const countryMap = {};
+      continentList.forEach((continent) => {
+        countryMap[continent.id] = continent.countries.slice();
+      });
+
+      const cityMap = {};
+      countries.forEach((country, countryKey) => {
+        cityMap[countryKey] = country.cities
+          .slice()
+          .sort((a, b) => a.name_en.localeCompare(b.name_en));
+      });
+
+      return {
+        continents: continentList,
+        countriesByContinent: countryMap,
+        citiesByCountry: cityMap
+      };
+    }
+
+    const WAKEUPHERE_NOTION_PAGE_ID = "38ea7f1b413c803cb5b7c0c18811688e";
+    const WAKEUPHERE_API_PATH = "/api/wakeuphere";
+
+    async function syncWakeupHereIdentity(press = false) {
+      if (!selectedCity || !selectedCountry) return;
+
+      const payload = {
+        pageId: WAKEUPHERE_NOTION_PAGE_ID,
+        city: selectedCity.name_en,
+        cityZh: selectedCity.name_zh,
+        country: selectedCountry.name_en,
+        countryZh: selectedCountry.name_zh,
+      };
+
+      try {
+        const url = new URL(WAKEUPHERE_API_PATH, window.location.href);
+        Object.entries(payload).forEach(([key, value]) => {
+          url.searchParams.set(key, value);
+        });
+
+        if (!press) {
+          const response = await fetch(url.toString(), { method: "GET" });
+          if (!response.ok) return;
+          const data = await response.json();
+          if (data?.matched && typeof data.userName === "string" && data.userName.trim()) {
+            selectedNotionUserName = data.userName.trim();
+          } else {
+            selectedNotionUserName = "YuPie";
+          }
+
+          const usernameEl = document.getElementById("alarm-username");
+          if (usernameEl) {
+            usernameEl.textContent = selectedNotionUserName;
+          }
+          return;
+        }
+
+        await fetch(url.toString(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...payload,
+            userName: selectedNotionUserName || "YuPie",
+            press: "yes",
+          }),
+        });
+      } catch (err) {
+        console.warn("WakeUpHere notion sync failed:", err);
+      }
+    }
+
+    // --- Stage Manager State ---
+    // Stage 0: Continent, Stage 1: Country, Stage 2: City, Stage 3: Running Alarm
+    let currentStage = 0; 
+    let selectedContinent = null;
+    let selectedCountry = null;
+    let selectedCity = null;
+    let selectedNotionUserName = "YuPie";
+
+    // Simulation states
+    let isSimulatingAlarm = false;
+    let isAlarmRinging = false;
+    let simulatedSeconds = 8 * 3600; // 08:00:00
+    let simulatedTimer = null;
+
+    // Array of current options matching active stage
+    let currentOptions = [];
+    let optionIndex = 0;
+    let optionMarkers = [];
+    let isSnapping = false;
+
+    let map = null;
+    let alarmTimer = null;
+    
+    // Stage 3 Reset Confirm Prompt and Stage 4 Ringing states
+    let isResetModalOpen = false;
+    let resetModalSelection = "yes"; // "yes" or "no"
+    let ringingMarker = null;
+
+    // Zoom config matching stage levels
+    const STAGE_ZOOMS = [2, 5, 10];
+
+    // --- Leaflet Map Init ---
+    function initMap() {
+      map = L.map('map', {
+        center: [34.0, 100.8], // Centered in Asia initially
+        zoom: STAGE_ZOOMS[0],
+        zoomControl: false,
+        attributionControl: false,
+        dragging: true,
+        scrollWheelZoom: true,
+        doubleClickZoom: true
+      });
+
+      // Dark styled tile layer
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        maxZoom: 20
+      }).addTo(map);
+
+      // On pan/drag completion, auto detect closest item on map
+      map.on('move', () => {
+        detectClosestOnMap();
+      });
+
+      map.on('moveend', () => {
+        if (isSnapping || currentStage === 3 || currentOptions.length === 0) return;
+        isSnapping = true;
+        const opt = currentOptions[optionIndex];
+        if (!opt || !opt.coords) {
+          isSnapping = false;
+          return;
+        }
+        map.panTo(opt.coords, { animate: true, duration: 0.35 });
+        setTimeout(() => {
+          isSnapping = false;
+        }, 400);
+      });
+    }
+
+    // --- Draw Marker Points for Current Selectable Options ---
+    function drawOptionMarkers() {
+      // Clear old markers
+      optionMarkers.forEach(m => m.remove());
+      optionMarkers = [];
+
+      if (!map || currentOptions.length === 0) return;
+
+      currentOptions.forEach((opt, idx) => {
+        const isSelected = (idx === optionIndex);
+        const name = opt.name_zh || opt.city_zh || "";
+
+        // Stylized node icon with a green pulse if selected, or steady dot if not
+        const nodeIcon = L.divIcon({
+          html: `
+            <div style="position: relative; width: 0; height: 0;">
+              <!-- Pulse beacon for selection -->
+              <div class="${isSelected ? 'cyber-pulse-style' : ''}" style="
+                position: absolute;
+                top: -10px; left: -10px;
+                width: 20px; height: 20px;
+                background-color: ${isSelected ? 'rgba(69, 233, 69, 0.35)' : 'rgba(69, 233, 69, 0.05)'};
+                border: 1px solid ${isSelected ? '#45e945' : 'rgba(69, 233, 69, 0.3)'};
+                border-radius: 50%;
+                pointer-events: none;
+                transition: all 0.25s ease;
+              "></div>
+              <!-- Inner core -->
+              <div style="
+                position: absolute;
+                top: -4px; left: -4px;
+                width: 8px; height: 8px;
+                background-color: ${isSelected ? '#ffffff' : '#45e945'};
+                border: 1.5px solid #000000;
+                border-radius: 50%;
+                pointer-events: none;
+              "></div>
+              <!-- Mini HUD label tag -->
+              <div style="
+                position: absolute;
+                left: 12px;
+                top: -9px;
+                background-color: rgba(5, 5, 5, 0.9);
+                border: 1px solid ${isSelected ? '#45e945' : 'rgba(69, 233, 69, 0.3)'};
+                padding: 2.5px 5.5px;
+                border-radius: 2.5px;
+                font-family: 'JetBrains Mono', 'Inter', monospace;
+                font-size: 9px;
+                font-weight: bold;
+                color: ${isSelected ? '#45e945' : '#aaaaaa'};
+                white-space: nowrap;
+                pointer-events: none;
+                box-shadow: 0 0 5px rgba(0,0,0,0.8);
+                transition: all 0.25s ease;
+              ">
+                ${name}
+              </div>
+            </div>
+          `,
+          className: "cyber-selection-node",
+          iconSize: [0, 0],
+          iconAnchor: [0, 0]
+        });
+
+        const marker = L.marker(opt.coords, {
+          icon: nodeIcon
+        }).addTo(map);
+
+        // Allow clicking on marker to select/pan to it!
+        marker.on('click', () => {
+          optionIndex = idx;
+          panToSelectedOption();
+        });
+
+        optionMarkers.push(marker);
+      });
+    }
+
+    // --- Set Stage Elements ---
+    function setStage(stage) {
+      currentStage = stage;
+      sound.playClick();
+
+      const stageLabel = document.getElementById("stage-label");
+      const zoomBadge = document.getElementById("zoom-level-badge");
+
+      if (stage === 0) {
+        stageLabel.textContent = "STAGE 0 // SELECT CONTINENT";
+        zoomBadge.textContent = "LV_1 (洲)";
+        currentOptions = locationsByContinent;
+        optionIndex = 0;
+        
+        map.setZoom(STAGE_ZOOMS[0]);
+        panToSelectedOption();
+
+      } else if (stage === 1) {
+        stageLabel.textContent = "STAGE 1 // SELECT COUNTRY";
+        zoomBadge.textContent = "LV_3 (國)";
+        currentOptions = locationsByCountry[selectedContinent.id] || [];
+        optionIndex = 0;
+        
+        map.setZoom(STAGE_ZOOMS[1]);
+        panToSelectedOption();
+
+      } else if (stage === 2) {
+        stageLabel.textContent = "STAGE 2 // SELECT CITY";
+        zoomBadge.textContent = "LV_5 (市)";
+        currentOptions = selectedCountry.cities || [];
+        optionIndex = 0;
+        
+        map.setZoom(STAGE_ZOOMS[2]);
+        panToSelectedOption();
+
+      } else if (stage === 3) {
+        // Clear active markers
+        optionMarkers.forEach(m => m.remove());
+        optionMarkers = [];
+
+        // Activate Alarm countdown screen!
+        document.getElementById("selection-overlays").classList.add("hidden");
+        document.getElementById("alarm-screen").classList.remove("hidden");
+        
+        // Start Alarm tick
+        sound.playSuccess();
+        startAlarmTick();
+      }
+    }
+
+    // --- Pan map smoothly to active option center ---
+    function panToSelectedOption() {
+      if (currentOptions.length === 0) return;
+      const opt = currentOptions[optionIndex];
+      map.panTo(opt.coords, { animate: true, duration: 0.6 });
+      updateUISelectionText();
+    }
+
+    // --- Update labels on screen ---
+    function updateUISelectionText() {
+      if (currentOptions.length === 0) return;
+      const opt = currentOptions[optionIndex];
+      const name = opt.name_zh + " (" + opt.name_en + ")";
+      document.getElementById("target-selection-name").textContent = name;
+      drawOptionMarkers(); // Draw or update option markers to highlight active selection
+    }
+
+    // --- Auto detect closest option based on current map center ---
+    function detectClosestOnMap() {
+      if (currentStage === 3 || currentOptions.length === 0) return;
+      const center = map.getCenter();
+      
+      let closestIdx = 0;
+      let minDistance = Infinity;
+
+      currentOptions.forEach((opt, idx) => {
+        const dx = opt.coords[0] - center.lat;
+        const dy = opt.coords[1] - center.lng;
+        const distance = Math.sqrt(dx*dx + dy*dy);
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestIdx = idx;
+        }
+      });
+
+      if (closestIdx !== optionIndex) {
+        optionIndex = closestIdx;
+        updateUISelectionText();
+      }
+    }
+
+    // --- Space / Confirm Stage Action ---
+    function confirmCurrentSelection() {
+      if (currentStage === 3) return;
+      if (currentOptions.length === 0) return;
+
+      const opt = currentOptions[optionIndex];
+
+      if (currentStage === 0) {
+        selectedContinent = opt;
+        setStage(1);
+      } else if (currentStage === 1) {
+        selectedCountry = opt;
+        setStage(2);
+      } else if (currentStage === 2) {
+        selectedCity = opt;
+        syncWakeupHereIdentity(false);
+        setStage(3);
+      }
+    }
+
+    // --- Manual Prev/Next Buttons ---
+    function cycleOption(direction) {
+      if (currentOptions.length === 0) return;
+      sound.playClick();
+      if (direction === "next") {
+        optionIndex = (optionIndex + 1) % currentOptions.length;
+      } else {
+        optionIndex = (optionIndex - 1 + currentOptions.length) % currentOptions.length;
+      }
+      panToSelectedOption();
+    }
+
+    // --- Keyboard Arrow Map Pan / Control Logic ---
+    window.addEventListener("keydown", (e) => {
+      // Check for Command+H or Ctrl+H (any screen)
+      const isH = e.key.toLowerCase() === 'h';
+      const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+      if (isCmdOrCtrl && isH) {
+        e.preventDefault();
+        triggerAlarmSimulation();
+        return;
+      }
+
+      if (isResetModalOpen) {
+        if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "].includes(e.key)) {
+          e.preventDefault();
+        }
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
+          resetModalSelection = resetModalSelection === "yes" ? "no" : "yes";
+          sound.playClick();
+          updateResetModalUI();
+        } else if (e.key === " ") {
+          confirmResetModalSelection();
+        }
+        return;
+      }
+
+      if (currentStage === 3) {
+        if (e.key === " ") {
+          e.preventDefault();
+          handleAlarmStageSpaceKey();
+        } else if (e.key === "Shift") {
+          e.preventDefault();
+          toggleCityTime();
+        }
+        return;
+      }
+
+      const panStep = 2.5 / (map.getZoom() || 1); // Adapt step size to zoom level
+
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
+        e.preventDefault();
+      }
+
+      if (e.key === "ArrowLeft") {
+        map.panBy([-50, 0], { animate: true });
+      } else if (e.key === "ArrowRight") {
+        map.panBy([50, 0], { animate: true });
+      } else if (e.key === "ArrowUp") {
+        map.panBy([0, -50], { animate: true });
+      } else if (e.key === "ArrowDown") {
+        map.panBy([0, 50], { animate: true });
+      } else if (e.key === " ") {
+        confirmCurrentSelection();
+      }
+    });
+
+    // --- Map Zoom In/Out Buttons ---
+    function adjustZoom(direction) {
+      sound.playClick();
+      if (direction === "in") {
+        map.zoomIn();
+      } else {
+        map.zoomOut();
+      }
+    }
+
+    let databaseLocations = [];
+
+    // --- Load Database Locations ---
+    async function loadDatabaseLocations() {
+      try {
+        databaseLocations = Array.isArray(window.CITIES_DATA) ? window.CITIES_DATA : [];
+        console.log("Loaded high-fidelity database locations:", databaseLocations);
+        const hierarchy = buildLocationHierarchy(databaseLocations);
+        locationsByContinent = hierarchy.continents;
+        locationsByCountry = hierarchy.countriesByContinent;
+
+        if (!selectedContinent) {
+          selectedContinent = locationsByContinent[0] || null;
+        }
+        if (selectedContinent && !selectedCountry) {
+          const countries = locationsByCountry[selectedContinent.id] || [];
+          selectedCountry = countries[0] || null;
+        }
+        if (selectedCountry && !selectedCity) {
+          selectedCity = (selectedCountry.cities && selectedCountry.cities[0]) || null;
+        }
+
+        if (map && currentStage === 0) {
+          currentOptions = locationsByContinent;
+          optionIndex = Math.max(
+            0,
+            locationsByContinent.findIndex(opt => opt.id === selectedContinent?.id)
+          );
+          panToSelectedOption();
+        }
+      } catch (err) {
+        console.error("Failed to load database locations", err);
+      }
+    }
+
+    const USERNAME_POOL = [
+      "alpha_01", "neo_coder", "cyber_grid", "rust_ace", "linus_k", 
+      "pixel_punk", "giga_hertz", "shell_coder", "pixel_art", "retro_pi", 
+      "green_neon", "matrix_re", "node_user", "void_pointer", "bit_shift",
+      "data_ghost", "luna_sys", "vector_0", "synapse", "quantum_q",
+      "hacker_cat", "zero_cool", "acid_burn", "crash_override", "cereal_killer"
+    ];
+
+    // --- Deterministic user count generator ---
+    function getDeterministicUserCount(cityName) {
+      let hash = 0;
+      for (let i = 0; i < cityName.length; i++) {
+        hash = cityName.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      return Math.abs(hash % 38) + 4; // stable count between 4 and 41 users
+    }
+
+    // --- Deterministic co-wakers generator ---
+    function getCoWakers(cityName) {
+      let hash = 0;
+      for (let i = 0; i < cityName.length; i++) {
+        hash = cityName.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      hash = Math.abs(hash);
+      const count = (hash % 4) + 6; // 6 to 9 co-wakers
+      const selectedNames = [];
+      const pool = [...USERNAME_POOL];
+      
+      for (let i = 0; i < count; i++) {
+        const index = (hash + i * 7) % pool.length;
+        selectedNames.push(pool[index]);
+        pool.splice(index, 1); // Avoid duplicates
+      }
+      return selectedNames;
+    }
+
+    // --- Alarm Countdown & Story Loading Logic ---
+    function startAlarmTick() {
+      if (!selectedCity) return;
+
+      isShowingCityTime = false;
+      if (cityTimeInterval) {
+        clearInterval(cityTimeInterval);
+        cityTimeInterval = null;
+      }
+
+      document.getElementById("alarm-city-name").textContent = selectedCity.name_zh + " // " + selectedCity.name_en;
+      document.getElementById("alarm-country-name").textContent = selectedCountry.name_zh + " // UTC " + (selectedCity.utcOffset >= 0 ? "+" + selectedCity.utcOffset : selectedCity.utcOffset);
+      const usernameEl = document.getElementById("alarm-username");
+      if (usernameEl) {
+        usernameEl.textContent = selectedNotionUserName || "YuPie";
+      }
+      syncWakeupHereIdentity(false);
+
+      // Populate orbiting co-waker names along the edge of the circle (tighter to edge)
+      const runway = document.getElementById("alarm-orbit-runway");
+      runway.innerHTML = "";
+      
+      const parentWidth = runway.offsetWidth || 500;
+      const radius = (parentWidth / 2) - 24; // cling tighter to circular outer border
+      runway.style.setProperty("--orbit-radius", `${radius}px`);
+      
+      const coWakers = getCoWakers(selectedCity.name_en);
+      const orbitDuration = 60; // 60 seconds for a complete rotation loop (slower speed)
+
+      const parentDiv = document.createElement("div");
+      parentDiv.className = "orbit-parent";
+      
+      coWakers.forEach((name, i) => {
+        const delay = -1 * (orbitDuration * (i / coWakers.length));
+        
+        const childDiv = document.createElement("div");
+        childDiv.className = "orbit-child";
+        childDiv.style.setProperty("--orbit-duration", `${orbitDuration}s`);
+        childDiv.style.setProperty("--orbit-delay", `${delay}s`);
+        
+        const textSpan = document.createElement("span");
+        textSpan.className = "orbit-text";
+        textSpan.textContent = `@${name}`;
+        
+        childDiv.appendChild(textSpan);
+        parentDiv.appendChild(childDiv);
+      });
+      runway.appendChild(parentDiv);
+
+      // Reset story container
+      const storyTextEl = document.getElementById("alarm-city-story");
+      const loadingEl = document.getElementById("alarm-story-loading");
+
+      storyTextEl.classList.add("hidden");
+      loadingEl.classList.remove("hidden");
+
+      // Find matching location in preset database
+      const matchedDbLoc = databaseLocations.find(loc => 
+        loc.city_zh === selectedCity.name_zh || 
+        loc.city.toLowerCase() === selectedCity.name_en.toLowerCase()
+      );
+
+      if (matchedDbLoc) {
+        const rawStory = matchedDbLoc.story_zh || matchedDbLoc.story;
+        
+        // Fetch summarized story with fallback
+        fetch('/api/summarize-story', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ story: rawStory, language: 'zh' })
+        })
+        .then(res => res.json())
+        .then(data => {
+          loadingEl.classList.add("hidden");
+          storyTextEl.classList.remove("hidden");
+          storyTextEl.textContent = data.summary || rawStory;
+        })
+        .catch(err => {
+          console.error("Failed summarizing alarm story:", err);
+          loadingEl.classList.add("hidden");
+          storyTextEl.classList.remove("hidden");
+          storyTextEl.textContent = rawStory;
+        });
+      } else {
+        // Generative story summary fallback
+        const genericStory = `${selectedCity.name_zh}是一座與世界緊密連結的城市。在即將到來的早晨八點，暖和的晨光將喚醒整座城市，伴隨清新朝氣展開全新旅程。`;
+        loadingEl.classList.add("hidden");
+        storyTextEl.classList.remove("hidden");
+        storyTextEl.textContent = genericStory;
+      }
+
+      updateAlarmCenterDisplay();
+    }
+
+    // --- Chosen City Local Time Toggling State & Logic ---
+    let isShowingCityTime = false;
+    let cityTimeInterval = null;
+
+    function updateAlarmCenterDisplay() {
+      const centerLabel = document.getElementById("alarm-center-label");
+      const cityNameEl = document.getElementById("alarm-city-name");
+      const countryNameEl = document.getElementById("alarm-country-name");
+      
+      if (!centerLabel || !cityNameEl || !countryNameEl) return;
+      if (!selectedCity || !selectedCountry) return;
+      
+      if (isShowingCityTime) {
+        centerLabel.textContent = `${selectedCity.name_zh}目前時間 // LOCAL TIME`;
+        centerLabel.classList.add("text-[#45e945]");
+        
+        cityNameEl.textContent = formatLocalTimeForTimezone(selectedCity.timezone, selectedCity.utcOffset);
+        cityNameEl.classList.add("text-[#45e945]");
+        cityNameEl.classList.remove("text-white");
+        
+        const offsetSign = selectedCity.utcOffset >= 0 ? "+" + selectedCity.utcOffset : selectedCity.utcOffset;
+        countryNameEl.textContent = selectedCountry.name_zh + (selectedCity.timezone ? ` // ${selectedCity.timezone}` : ` // UTC ${offsetSign}`);
+        countryNameEl.classList.add("text-[#45e945]/70");
+        countryNameEl.classList.remove("text-gray-400");
+      } else {
+        centerLabel.textContent = "預約甦醒位置";
+        centerLabel.classList.add("text-[#45e945]");
+        
+        cityNameEl.classList.remove("text-[#45e945]");
+        cityNameEl.classList.add("text-white");
+        
+        countryNameEl.classList.remove("text-[#45e945]/70");
+        countryNameEl.classList.add("text-gray-400");
+        
+        // Restore current chosen location
+        cityNameEl.textContent = selectedCity.name_zh + " // " + selectedCity.name_en;
+        countryNameEl.textContent = selectedCountry.name_zh + (selectedCity.timezone ? ` // ${selectedCity.timezone}` : ` // UTC ${selectedCity.utcOffset >= 0 ? "+" + selectedCity.utcOffset : selectedCity.utcOffset}`);
+      }
+    }
+
+    function toggleCityTime() {
+      if (currentStage !== 3) return;
+      isShowingCityTime = !isShowingCityTime;
+      sound.playClick();
+      updateAlarmCenterDisplay();
+      
+      if (isShowingCityTime) {
+        if (!cityTimeInterval) {
+          cityTimeInterval = setInterval(updateAlarmCenterDisplay, 1000);
+        }
+      } else {
+        if (cityTimeInterval) {
+          clearInterval(cityTimeInterval);
+          cityTimeInterval = null;
+        }
+      }
+    }
+
+    // --- Reset Modal Handlers ---
+    function openResetModal() {
+      isResetModalOpen = true;
+      resetModalSelection = "yes";
+      updateResetModalUI();
+      document.getElementById("reset-confirm-modal").classList.remove("hidden");
+    }
+
+    function closeResetModal() {
+      isResetModalOpen = false;
+      document.getElementById("reset-confirm-modal").classList.add("hidden");
+    }
+
+    function updateResetModalUI() {
+      const yesBtn = document.getElementById("confirm-btn-yes");
+      const noBtn = document.getElementById("confirm-btn-no");
+      if (!yesBtn || !noBtn) return;
+      
+      if (resetModalSelection === "yes") {
+        yesBtn.className = "px-[5vmin] py-[2vmin] border-2 border-[#45e945] bg-[#45e945]/10 text-[#45e945] rounded-xl font-mono text-[3.2vmin] md:text-[3.6vmin] font-bold cursor-pointer transition-all uppercase tracking-wider scale-105 shadow-[0_0_15px_rgba(69,233,69,0.3)]";
+        noBtn.className = "px-[5vmin] py-[2vmin] border border-white/20 bg-transparent text-gray-400 rounded-xl font-mono text-[3.2vmin] md:text-[3.6vmin] font-bold cursor-pointer transition-all uppercase tracking-wider";
+        yesBtn.textContent = "[ YES ]";
+        noBtn.textContent = "NO";
+      } else {
+        yesBtn.className = "px-[5vmin] py-[2vmin] border border-white/20 bg-transparent text-gray-400 rounded-xl font-mono text-[3.2vmin] md:text-[3.6vmin] font-bold cursor-pointer transition-all uppercase tracking-wider";
+        noBtn.className = "px-[5vmin] py-[2vmin] border-2 border-[#45e945] bg-[#45e945]/10 text-[#45e945] rounded-xl font-mono text-[3.2vmin] md:text-[3.6vmin] font-bold cursor-pointer transition-all uppercase tracking-wider scale-105 shadow-[0_0_15px_rgba(69,233,69,0.3)]";
+        yesBtn.textContent = "YES";
+        noBtn.textContent = "[ NO ]";
+      }
+    }
+
+    function confirmResetModalSelection() {
+      sound.playClick();
+      if (resetModalSelection === "yes") {
+        closeResetModal();
+        resetAlarm();
+      } else {
+        closeResetModal();
+      }
+    }
+
+    // Wire up mouse/click event listeners for the reset modal
+    document.addEventListener("DOMContentLoaded", () => {
+      const yesBtn = document.getElementById("confirm-btn-yes");
+      const noBtn = document.getElementById("confirm-btn-no");
+      if (yesBtn) {
+        yesBtn.addEventListener("click", () => {
+          resetModalSelection = "yes";
+          confirmResetModalSelection();
+        });
+      }
+      if (noBtn) {
+        noBtn.addEventListener("click", () => {
+          resetModalSelection = "no";
+          confirmResetModalSelection();
+        });
+      }
+    });
+
+    // --- Reset / Go back to Stage 0 ---
+    function resetAlarm() {
+      if (alarmTimer) clearInterval(alarmTimer);
+      if (simulatedTimer) clearInterval(simulatedTimer);
+      simulatedTimer = null;
+      isSimulatingAlarm = false;
+      isAlarmRinging = false;
+      sound.stopAlarmRinging();
+
+      // Clean up Map Top Overlay ringing UI
+      stopRingingUI();
+
+      isShowingCityTime = false;
+      if (cityTimeInterval) {
+        clearInterval(cityTimeInterval);
+        cityTimeInterval = null;
+      }
+      updateAlarmCenterDisplay();
+
+      const displayEl = document.getElementById("alarm-waking-time-display");
+      if (displayEl) {
+        displayEl.textContent = "08:00 AM";
+      }
+
+      const statusLabel = document.getElementById("alarm-status-label");
+      if (statusLabel) {
+        statusLabel.textContent = "ALARM ACTIVE";
+        statusLabel.classList.remove("text-red-500", "animate-pulse");
+        statusLabel.classList.add("text-[#45e945]");
+      }
+      
+      document.getElementById("alarm-orbit-runway").innerHTML = "";
+      document.getElementById("alarm-screen").classList.add("hidden");
+      document.getElementById("selection-overlays").classList.remove("hidden");
+      
+      selectedContinent = null;
+      selectedCountry = null;
+      selectedCity = null;
+
+      setStage(0);
+    }
+
+    // --- Alarm Simulation Trigger (Cmd/Ctrl + H) ---
+    function triggerAlarmSimulation() {
+      // 1. Ensure we have a valid selected location
+      if (!selectedContinent) {
+        selectedContinent = locationsByContinent[0] || null;
+      }
+      if (!selectedCountry) {
+        const countries = locationsByCountry[selectedContinent?.id] || [];
+        selectedCountry = countries[0] || null;
+      }
+      if (!selectedCity) {
+        selectedCity = (selectedCountry && selectedCountry.cities && selectedCountry.cities[0]) || null;
+      }
+
+      syncWakeupHereIdentity(false);
+
+      // If we are not on Stage 3 screen, transition to it
+      if (currentStage !== 3) {
+        optionMarkers.forEach(m => m.remove());
+        optionMarkers = [];
+
+        document.getElementById("selection-overlays").classList.add("hidden");
+        document.getElementById("alarm-screen").classList.remove("hidden");
+        currentStage = 3;
+      }
+
+      // 2. Setup simulation state
+      isSimulatingAlarm = true;
+      isAlarmRinging = true;
+      simulatedSeconds = 8 * 3600; // starts at 08:00:00 AM
+
+      isShowingCityTime = false;
+      if (cityTimeInterval) {
+        clearInterval(cityTimeInterval);
+        cityTimeInterval = null;
+      }
+
+      // Clear any running timers
+      if (alarmTimer) {
+        clearInterval(alarmTimer);
+        alarmTimer = null;
+      }
+      if (simulatedTimer) {
+        clearInterval(simulatedTimer);
+        simulatedTimer = null;
+      }
+
+      // 3. Start ringing sound loop
+      sound.startAlarmRinging();
+
+      // 4. Update UI labels
+      document.getElementById("alarm-city-name").textContent = selectedCity.name_zh + " // " + selectedCity.name_en;
+      document.getElementById("alarm-country-name").textContent = selectedCountry.name_zh + " // UTC " + (selectedCity.utcOffset >= 0 ? "+" + selectedCity.utcOffset : selectedCity.utcOffset);
+
+      // Populate orbiting co-wakers
+      const runway = document.getElementById("alarm-orbit-runway");
+      runway.innerHTML = "";
+      const parentWidth = runway.offsetWidth || 500;
+      const radius = (parentWidth / 2) - 24; // cling tighter to circular outer border
+      runway.style.setProperty("--orbit-radius", `${radius}px`);
+      const coWakers = getCoWakers(selectedCity.name_en);
+      const orbitDuration = 60; // slower speed
+      const parentDiv = document.createElement("div");
+      parentDiv.className = "orbit-parent";
+      coWakers.forEach((name, i) => {
+        const delay = -1 * (orbitDuration * (i / coWakers.length));
+        const childDiv = document.createElement("div");
+        childDiv.className = "orbit-child";
+        childDiv.style.setProperty("--orbit-duration", `${orbitDuration}s`);
+        childDiv.style.setProperty("--orbit-delay", `${delay}s`);
+        const textSpan = document.createElement("span");
+        textSpan.className = "orbit-text";
+        textSpan.textContent = `@${name}`;
+        childDiv.appendChild(textSpan);
+        parentDiv.appendChild(childDiv);
+      });
+      runway.appendChild(parentDiv);
+
+      // Load Story
+      const storyTextEl = document.getElementById("alarm-city-story");
+      const loadingEl = document.getElementById("alarm-story-loading");
+      storyTextEl.classList.add("hidden");
+      loadingEl.classList.remove("hidden");
+
+      const matchedDbLoc = databaseLocations.find(loc => 
+        loc.city_zh === selectedCity.name_zh || 
+        loc.city.toLowerCase() === selectedCity.name_en.toLowerCase()
+      );
+
+      if (matchedDbLoc) {
+        const rawStory = matchedDbLoc.story_zh || matchedDbLoc.story;
+        fetch('/api/summarize-story', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ story: rawStory, language: 'zh' })
+        })
+        .then(res => res.json())
+        .then(data => {
+          loadingEl.classList.add("hidden");
+          storyTextEl.classList.remove("hidden");
+          storyTextEl.textContent = data.summary || rawStory;
+        })
+        .catch(err => {
+          console.error("Failed summarizing alarm story:", err);
+          loadingEl.classList.add("hidden");
+          storyTextEl.classList.remove("hidden");
+          storyTextEl.textContent = rawStory;
+        });
+      } else {
+        const genericStory = `${selectedCity.name_zh}是一座與世界緊密連結的城市。在即將到來的早晨八點，暖和的晨光將喚醒整座城市，伴隨清新朝氣展開全新旅程。`;
+        loadingEl.classList.add("hidden");
+        storyTextEl.classList.remove("hidden");
+        storyTextEl.textContent = genericStory;
+      }
+
+      // Update status banner
+      const statusLabel = document.getElementById("alarm-status-label");
+      statusLabel.textContent = "ALARM // [SPACE] TO DISMISS";
+      statusLabel.classList.remove("text-[#45e945]");
+      statusLabel.classList.add("text-red-500", "animate-pulse");
+
+      // 5. Update Time Display loop (without seconds, updates every minute)
+      function updateSimulatedClock() {
+        const h24 = Math.floor(simulatedSeconds / 3600) % 24;
+        const m = Math.floor((simulatedSeconds % 3600) / 60);
+        const ampm = h24 >= 12 ? "PM" : "AM";
+        const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+        const padH = String(h12).padStart(2, '0');
+        const padM = String(m).padStart(2, '0');
+        
+        const displayEl = document.getElementById("alarm-waking-time-display");
+        if (displayEl) {
+          displayEl.textContent = `${padH}:${padM} ${ampm}`;
+        }
+      }
+
+      updateSimulatedClock();
+      updateAlarmCenterDisplay();
+      simulatedTimer = setInterval(() => {
+        simulatedSeconds += 60; // Advance by 1 minute
+        updateSimulatedClock();
+      }, 60000); // Trigger every 60 seconds (1 minute of real time)
+
+      // Start the map on top ringing HUD experience
+      startRingingUI();
+    }
+
+    // --- Ringing State Map Overlay Handlers ---
+    function startRingingUI() {
+      if (!selectedCity) return;
+      
+      // 1. Bring map selection screen to the top
+      const selectionScreen = document.getElementById("selection-screen");
+      if (selectionScreen) {
+        selectionScreen.style.zIndex = "25";
+      }
+      
+      // 2. Hide selection HUD overlays so we don't see buttons/search on the map
+      const selectionOverlays = document.getElementById("selection-overlays");
+      if (selectionOverlays) {
+        selectionOverlays.classList.add("hidden");
+      }
+      
+      // 3. Populate and show ringing HUD overlay on top of the map
+      const ringingOverlay = document.getElementById("ringing-overlay");
+      const ringingCitySubtitle = document.getElementById("ringing-city-subtitle");
+      if (ringingOverlay && ringingCitySubtitle) {
+        ringingCitySubtitle.textContent = `${selectedCity.name_zh} // ${selectedCountry ? selectedCountry.name_zh : ''}`;
+        ringingOverlay.classList.remove("hidden");
+      }
+      
+      // 4. Set map view to focus tightly on the target city coordinates
+      if (map) {
+        map.setView(selectedCity.coords, 11, { animate: true, duration: 1.0 });
+      }
+      
+      // 5. Create the synchronized bouncing green marker on the map
+      if (ringingMarker) {
+        ringingMarker.remove();
+        ringingMarker = null;
+      }
+      
+      const ringingIcon = L.divIcon({
+        html: `
+          <div style="position: relative; transform: translate(-50%, -80%); display: flex; flex-direction: column; items-center; justify-content: center; width: 140px; height: 140px; pointer-events: none;">
+            <div class="flex flex-col items-center justify-center">
+              <!-- Glow label with bounce -->
+              <div class="bg-[#15803d] text-white border border-[#45e945] font-sans text-[12px] font-extrabold px-3 py-1 rounded shadow-[0_0_15px_rgba(69,233,69,0.7)] uppercase tracking-wider mb-2 whitespace-nowrap animate-bounce">
+                ${selectedCity.name_zh} 已抵達！
+              </div>
+              <!-- Ringing/Bouncing point -->
+              <div class="ringing-active-point relative flex items-center justify-center w-10 h-10">
+                <div class="w-8 h-8 bg-[#45e945]/30 rounded-full absolute animate-ping"></div>
+                <div class="w-6 h-6 border-2 border-[#45e945] rounded-full absolute"></div>
+                <div class="w-3 h-3 bg-[#45e945] rounded-full absolute"></div>
+              </div>
+            </div>
+          </div>
+        `,
+        className: "ringing-point-container",
+        iconSize: [0, 0],
+        iconAnchor: [0, 0]
+      });
+      
+      if (map) {
+        ringingMarker = L.marker(selectedCity.coords, { icon: ringingIcon }).addTo(map);
+      }
+    }
+
+    function stopRingingUI() {
+      // 1. Reset map zIndex back to normal
+      const selectionScreen = document.getElementById("selection-screen");
+      if (selectionScreen) {
+        selectionScreen.style.zIndex = "";
+      }
+      
+      // 2. Hide ringing HUD overlay
+      const ringingOverlay = document.getElementById("ringing-overlay");
+      if (ringingOverlay) {
+        ringingOverlay.classList.add("hidden");
+      }
+      
+      // 3. Remove the custom ringing marker from the map
+      if (ringingMarker) {
+        ringingMarker.remove();
+        ringingMarker = null;
+      }
+      
+      // 4. Restore normal alarm screen countdown HUD
+      const alarmScreen = document.getElementById("alarm-screen");
+      if (alarmScreen) {
+        alarmScreen.classList.remove("hidden");
+      }
+    }
+
+    // --- Spacebar Action on Alarm Screen ---
+    function handleAlarmStageSpaceKey() {
+      if (isAlarmRinging) {
+        // First Space press: Stop ringing, keep normal clock running
+        isAlarmRinging = false;
+        sound.stopAlarmRinging();
+        syncWakeupHereIdentity(true);
+
+        const statusLabel = document.getElementById("alarm-status-label");
+        if (statusLabel) {
+          statusLabel.textContent = "STOPPED // [SPACE] NEW CITY";
+          statusLabel.classList.remove("text-red-500", "animate-pulse");
+          statusLabel.classList.add("text-[#45e945]");
+        }
+
+        // Clean up Map Top Overlay ringing UI
+        stopRingingUI();
+      } else {
+        // If not ringing, prompt "重新預約甦醒位置嗎？" modal instead of resetting immediately
+        openResetModal();
+      }
+    }
+
+    // --- Responsive Orbit Radius Updater ---
+    function updateOrbitRadius() {
+      const runway = document.getElementById("alarm-orbit-runway");
+      if (runway) {
+        const parentWidth = runway.offsetWidth || 500;
+        const radius = (parentWidth / 2) - 24; // cling tighter to circular outer border
+        runway.style.setProperty("--orbit-radius", `${radius}px`);
+      }
+      if (map) {
+        map.invalidateSize();
+      }
+    }
+    window.addEventListener("resize", updateOrbitRadius);
+
+    // --- Exit ---
+    function exitPage() {
+      sound.playClick();
+      window.location.href = "/";
+    }
+
+    // --- Bind DOM Button Triggers ---
+    const cyclePrevBtn = document.getElementById("cycle-prev-btn");
+    if (cyclePrevBtn) {
+      cyclePrevBtn.addEventListener("click", () => cycleOption("prev"));
+    }
+    const cycleNextBtn = document.getElementById("cycle-next-btn");
+    if (cycleNextBtn) {
+      cycleNextBtn.addEventListener("click", () => cycleOption("next"));
+    }
+    const confirmBtn = document.getElementById("confirm-btn");
+    if (confirmBtn) {
+      confirmBtn.addEventListener("click", confirmCurrentSelection);
+    }
+    
+    document.getElementById("zoom-in-btn").addEventListener("click", () => adjustZoom("in"));
+    document.getElementById("zoom-out-btn").addEventListener("click", () => adjustZoom("out"));
+    
+    const alarmResetBtn = document.getElementById("alarm-reset-btn");
+    if (alarmResetBtn) {
+      alarmResetBtn.addEventListener("click", resetAlarm);
+    }
+    const exitBtn = document.getElementById("exit-btn");
+    if (exitBtn) {
+      exitBtn.addEventListener("click", exitPage);
+    }
+
+    // Startup
+    window.addEventListener("DOMContentLoaded", () => {
+      initMap();
+      loadDatabaseLocations().then(() => {
+        setStage(0);
+      });
+    });
+  </script>
+</body>
+</html>
