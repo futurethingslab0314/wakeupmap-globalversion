@@ -6,7 +6,11 @@
   },
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/wakeuphere/(.*)",
+      "destination": "/wakeuphere/$1"
+    },
+    {
+      "source": "/((?!api/|wakeuphere/).*)",
       "destination": "/index.html"
     }
   ]
