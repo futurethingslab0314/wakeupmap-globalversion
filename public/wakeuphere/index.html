@@ -604,7 +604,8 @@
 
     const WAKEUPHERE_API_PATH = "/api/wakeuphere";
 
-    async function syncWakeupHereIdentity(press = false) {
+    async function syncWakeupHereIdentity(options = {}) {
+      const { press = false, userNameOnly = false } = options;
       try {
         const url = new URL(WAKEUPHERE_API_PATH, window.location.href);
 
@@ -630,11 +631,11 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             userName: selectedNotionUserName || "YuPie",
-            press: "yes",
             setup_city: selectedCity?.name_en || "",
             setup_city_zh: selectedCity?.name_zh || "",
             setup_country: selectedCountry?.name_en || "",
             setup_country_zh: selectedCountry?.name_zh || "",
+            ...(press ? { press: "yes" } : {}),
           }),
         });
       } catch (err) {
@@ -894,7 +895,7 @@
         setStage(2);
       } else if (currentStage === 2) {
         selectedCity = opt;
-        syncWakeupHereIdentity(false);
+        syncWakeupHereIdentity({ press: false });
         setStage(3);
       }
     }
@@ -1063,7 +1064,7 @@
       if (usernameEl) {
         usernameEl.textContent = selectedNotionUserName || "YuPie";
       }
-      syncWakeupHereIdentity(false);
+      syncWakeupHereIdentity({ press: false });
 
       // Populate orbiting co-waker names along the edge of the circle (tighter to edge)
       const runway = document.getElementById("alarm-orbit-runway");
@@ -1314,7 +1315,7 @@
         selectedCity = (selectedCountry && selectedCountry.cities && selectedCountry.cities[0]) || null;
       }
 
-      syncWakeupHereIdentity(false);
+      syncWakeupHereIdentity({ press: false });
 
       // If we are not on Stage 3 screen, transition to it
       if (currentStage !== 3) {
@@ -1541,7 +1542,7 @@
         // First Space press: Stop ringing, keep normal clock running
         isAlarmRinging = false;
         sound.stopAlarmRinging();
-        syncWakeupHereIdentity(true);
+        syncWakeupHereIdentity({ press: true });
 
         const statusLabel = document.getElementById("alarm-status-label");
         if (statusLabel) {

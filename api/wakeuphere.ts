@@ -177,7 +177,8 @@ export default async function handler(
         throw new Error("No page found in wakeuphere database");
       }
       const nextUserName = typeof body.userName === "string" && body.userName.trim() ? body.userName.trim() : DEFAULT_USER_NAME;
-      const nextPress = typeof body.press === "string" ? body.press : "yes";
+      const hasPress = typeof body.press === "string";
+      const nextPress = hasPress ? body.press : "";
       const nextSetupCity = typeof body.setup_city === "string" ? body.setup_city : "";
       const nextSetupCityZh = typeof body.setup_city_zh === "string" ? body.setup_city_zh : "";
       const nextSetupCountry = typeof body.setup_country === "string" ? body.setup_country : "";
@@ -189,11 +190,11 @@ export default async function handler(
           schema[userNameName]?.type === "title" ? buildTitleProperty(nextUserName) : buildTextProperty(nextUserName);
       }
 
-      if (pressName) {
+      if (pressName && hasPress) {
         if (schema[pressName]?.type === "checkbox") {
           updateProperties[pressName] = { checkbox: nextPress === "yes" };
         } else {
-          updateProperties[pressName] = { select: { name: nextPress } };
+          updateProperties[pressName] = { select: { name: nextPress || "yes" } };
         }
       }
 
@@ -234,7 +235,7 @@ export default async function handler(
         pageId,
         pageIdToUpdate,
         userName: nextUserName,
-        press: nextPress,
+        ...(hasPress ? { press: nextPress } : {}),
         setup_city: nextSetupCity,
         setup_city_zh: nextSetupCityZh,
         setup_country: nextSetupCountry,
