@@ -7,6 +7,14 @@ type NotionPageResponse = {
   properties?: Record<string, unknown>;
 };
 
+type NotionDatabaseResponse = {
+  properties?: Record<string, NotionPropertyDefinition>;
+};
+
+type NotionQueryResponse = {
+  results?: Array<{ id?: string; properties?: Record<string, unknown> }>;
+};
+
 const DEFAULT_USER_NAME = "YuPie";
 
 function normalizeKey(value: string): string {
@@ -64,8 +72,8 @@ function buildTitleProperty(value: string) {
   return { title: [{ text: { content: value } }] };
 }
 
-async function loadPage(pageId: string, apiKey: string): Promise<NotionPageResponse> {
-  const response = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+async function loadDatabase(databaseId: string, apiKey: string): Promise<NotionDatabaseResponse> {
+  const response = await fetch(`https://api.notion.com/v1/databases/${databaseId}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -74,10 +82,31 @@ async function loadPage(pageId: string, apiKey: string): Promise<NotionPageRespo
   });
 
   if (!response.ok) {
-    throw new Error(`Notion page fetch failed: ${response.status} ${await response.text()}`);
+    throw new Error(`Notion database fetch failed: ${response.status} ${await response.text()}`);
   }
 
-  return (await response.json()) as NotionPageResponse;
+  return (await response.json()) as NotionDatabaseResponse;
+}
+
+async function loadFirstPage(databaseId: string, apiKey: string): Promise<{ id?: string; properties?: Record<string, unknown> }> {
+  const response = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Notion-Version": "2022-06-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      page_size: 1,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Notion query failed: ${response.status} ${await response.text()}`);
+  }
+
+  const payload = (await response.json()) as NotionQueryResponse;
+  return payload.results?.[0] ?? {};
 }
 
 export default async function handler(
@@ -96,9 +125,8 @@ export default async function handler(
       return response.status(500).json({ error: "Missing NOTION_API_KEY or WAKEUPHERE_PAGE_ID" });
     }
 
-    const page = await loadPage(pageId, notionApiKey);
-    const properties = page.properties ?? {};
-    const schema = properties as Record<string, NotionPropertyDefinition>;
+    const database = await loadDatabase(pageId, notionApiKey);
+    const schema = database.properties ?? {};
 
     const userNameName =
       findPropertyName(schema, "title", ["userName", "user name", "name"]) ??
@@ -118,6 +146,8 @@ export default async function handler(
       findPropertyName(schema, "rich_text", ["setup_country_zh", "setup country zh", "country_zh", "country zh"]);
 
     if (request.method === "GET") {
+      const firstPage = await loadFirstPage(pageId, notionApiKey);
+      const properties = firstPage.properties ?? {};
       const userName =
         (userNameName
           ? (properties[userNameName] as { title?: unknown; rich_text?: unknown })?.title
@@ -133,6 +163,7 @@ export default async function handler(
 
       return response.status(200).json({
         pageId,
+        pageCount: 1,
         userName,
         press,
       });
@@ -140,6 +171,11 @@ export default async function handler(
 
     if (request.method === "POST") {
       const body = request.body ?? {};
+      const page = await loadFirstPage(pageId, notionApiKey);
+      const pageIdToUpdate = page.id;
+      if (!pageIdToUpdate) {
+        throw new Error("No page found in wakeuphere database");
+      }
       const nextUserName = typeof body.userName === "string" && body.userName.trim() ? body.userName.trim() : DEFAULT_USER_NAME;
       const nextPress = typeof body.press === "string" ? body.press : "yes";
       const nextSetupCity = typeof body.setup_city === "string" ? body.setup_city : "";
@@ -179,7 +215,7 @@ export default async function handler(
         updateProperties[setupCountryZhName] = buildTextProperty(nextSetupCountryZh);
       }
 
-      const updateResponse = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+      const updateResponse = await fetch(`https://api.notion.com/v1/pages/${pageIdToUpdate}`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${notionApiKey}`,
@@ -196,6 +232,7 @@ export default async function handler(
       return response.status(200).json({
         ok: true,
         pageId,
+        pageIdToUpdate,
         userName: nextUserName,
         press: nextPress,
         setup_city: nextSetupCity,
