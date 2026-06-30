@@ -605,32 +605,15 @@
     const WAKEUPHERE_API_PATH = "/api/wakeuphere";
 
     async function syncWakeupHereIdentity(options = {}) {
-      const { press = false, userNameOnly = false } = options;
+      const { press = false } = options;
       try {
         const url = new URL(WAKEUPHERE_API_PATH, window.location.href);
-
-        if (!press) {
-          const response = await fetch(url.toString(), { method: "GET" });
-          if (!response.ok) return;
-          const data = await response.json();
-          if (typeof data.userName === "string" && data.userName.trim()) {
-            selectedNotionUserName = data.userName.trim();
-          } else {
-            selectedNotionUserName = "YuPie";
-          }
-
-          const usernameEl = document.getElementById("alarm-username");
-          if (usernameEl) {
-            usernameEl.textContent = selectedNotionUserName;
-          }
-          return;
-        }
 
         await fetch(url.toString(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            userName: selectedNotionUserName || "YuPie",
+            userName: "YuPie",
             setup_city: selectedCity?.name_en || "",
             setup_city_zh: selectedCity?.name_zh || "",
             setup_country: selectedCountry?.name_en || "",
@@ -1112,25 +1095,9 @@
 
       if (matchedDbLoc) {
         const rawStory = matchedDbLoc.story_zh || matchedDbLoc.story;
-        
-        // Fetch summarized story with fallback
-        fetch('/api/summarize-story', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ story: rawStory, language: 'zh' })
-        })
-        .then(res => res.json())
-        .then(data => {
-          loadingEl.classList.add("hidden");
-          storyTextEl.classList.remove("hidden");
-          storyTextEl.textContent = data.summary || rawStory;
-        })
-        .catch(err => {
-          console.error("Failed summarizing alarm story:", err);
-          loadingEl.classList.add("hidden");
-          storyTextEl.classList.remove("hidden");
-          storyTextEl.textContent = rawStory;
-        });
+        loadingEl.classList.add("hidden");
+        storyTextEl.classList.remove("hidden");
+        storyTextEl.textContent = rawStory;
       } else {
         // Generative story summary fallback
         const genericStory = `${selectedCity.name_zh}是一座與世界緊密連結的城市。在即將到來的早晨八點，暖和的晨光將喚醒整座城市，伴隨清新朝氣展開全新旅程。`;
@@ -1392,23 +1359,9 @@
 
       if (matchedDbLoc) {
         const rawStory = matchedDbLoc.story_zh || matchedDbLoc.story;
-        fetch('/api/summarize-story', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ story: rawStory, language: 'zh' })
-        })
-        .then(res => res.json())
-        .then(data => {
-          loadingEl.classList.add("hidden");
-          storyTextEl.classList.remove("hidden");
-          storyTextEl.textContent = data.summary || rawStory;
-        })
-        .catch(err => {
-          console.error("Failed summarizing alarm story:", err);
-          loadingEl.classList.add("hidden");
-          storyTextEl.classList.remove("hidden");
-          storyTextEl.textContent = rawStory;
-        });
+        loadingEl.classList.add("hidden");
+        storyTextEl.classList.remove("hidden");
+        storyTextEl.textContent = rawStory;
       } else {
         const genericStory = `${selectedCity.name_zh}是一座與世界緊密連結的城市。在即將到來的早晨八點，暖和的晨光將喚醒整座城市，伴隨清新朝氣展開全新旅程。`;
         loadingEl.classList.add("hidden");

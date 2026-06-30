@@ -176,7 +176,7 @@ export default async function handler(
       if (!pageIdToUpdate) {
         throw new Error("No page found in wakeuphere database");
       }
-      const nextUserName = typeof body.userName === "string" && body.userName.trim() ? body.userName.trim() : DEFAULT_USER_NAME;
+      const nextUserName = DEFAULT_USER_NAME;
       const hasPress = typeof body.press === "string";
       const nextPress = hasPress ? body.press : "";
       const nextSetupCity = typeof body.setup_city === "string" ? body.setup_city : "";
