@@ -251,7 +251,7 @@ async function generateRecipe(
         ...("sceneSetting" in breakfastConcept && breakfastConcept.sceneSetting
           ? [`Scene setting: ${breakfastConcept.sceneSetting}`]
           : []),
-        ...("visualAnchors" in breakfastConcept && breakfastConcept.visualAnchors?.length
+        ...("visualAnchors" in breakfastConcept && Array.isArray(breakfastConcept.visualAnchors) && breakfastConcept.visualAnchors.length
           ? [`Visual anchors: ${breakfastConcept.visualAnchors.join(", ")}`]
           : []),
         "Generate a practical single-serving breakfast recipe inspired by this city and country.",
