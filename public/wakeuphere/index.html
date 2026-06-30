@@ -1573,9 +1573,6 @@
       const nextValue = window.prompt("請輸入 userName", currentValue);
       if (nextValue === null) return;
       const stored = setStoredUserName(nextValue);
-      if (selectedCity) {
-        syncWakeupHereIdentity({ press: false });
-      }
       console.log("WakeUpHere userName set to:", stored);
     }
 
