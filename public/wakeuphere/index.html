@@ -908,7 +908,6 @@
         selectedCity = opt;
         selectedNotionUserName = getStoredUserName();
         fetchWakeupHereIdentity();
-        syncWakeupHereIdentity({ press: false });
         setStage(3);
       }
     }
@@ -1313,8 +1312,6 @@
       if (!selectedCity) {
         selectedCity = (selectedCountry && selectedCountry.cities && selectedCountry.cities[0]) || null;
       }
-
-      syncWakeupHereIdentity({ press: false });
 
       // If we are not on Stage 3 screen, transition to it
       if (currentStage !== 3) {
