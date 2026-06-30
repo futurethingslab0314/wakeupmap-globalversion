@@ -1031,40 +1031,64 @@
       }
     }
 
-    const USERNAME_POOL = [
-      "alpha_01", "neo_coder", "cyber_grid", "rust_ace", "linus_k", 
-      "pixel_punk", "giga_hertz", "shell_coder", "pixel_art", "retro_pi", 
-      "green_neon", "matrix_re", "node_user", "void_pointer", "bit_shift",
-      "data_ghost", "luna_sys", "vector_0", "synapse", "quantum_q",
-      "hacker_cat", "zero_cool", "acid_burn", "crash_override", "cereal_killer"
-    ];
+    async function fetchCityUserNames(city) {
+      try {
+        const url = new URL(WAKEUPHERE_API_PATH, window.location.href);
+        if (city?.name_en) {
+          url.searchParams.set("setup_city", city.name_en);
+        }
+        if (city?.name_zh) {
+          url.searchParams.set("setup_city_zh", city.name_zh);
+        }
 
-    // --- Deterministic user count generator ---
-    function getDeterministicUserCount(cityName) {
-      let hash = 0;
-      for (let i = 0; i < cityName.length; i++) {
-        hash = cityName.charCodeAt(i) + ((hash << 5) - hash);
+        const response = await fetch(url.toString(), { method: "GET" });
+        const data = await response.json();
+        if (!response.ok || !data || !Array.isArray(data.users)) return [];
+        return data.users.map((name) => String(name || "").trim()).filter(Boolean);
+      } catch (err) {
+        console.warn("Failed to load city user names:", err);
+        return [];
       }
-      return Math.abs(hash % 38) + 4; // stable count between 4 and 41 users
     }
 
-    // --- Deterministic co-wakers generator ---
-    function getCoWakers(cityName) {
-      let hash = 0;
-      for (let i = 0; i < cityName.length; i++) {
-        hash = cityName.charCodeAt(i) + ((hash << 5) - hash);
+    function clearOrbitRunway() {
+      const runway = document.getElementById("alarm-orbit-runway");
+      if (runway) {
+        runway.innerHTML = "";
       }
-      hash = Math.abs(hash);
-      const count = (hash % 4) + 6; // 6 to 9 co-wakers
-      const selectedNames = [];
-      const pool = [...USERNAME_POOL];
-      
-      for (let i = 0; i < count; i++) {
-        const index = (hash + i * 7) % pool.length;
-        selectedNames.push(pool[index]);
-        pool.splice(index, 1); // Avoid duplicates
-      }
-      return selectedNames;
+    }
+
+    async function renderCityUsersOrbit() {
+      const runway = document.getElementById("alarm-orbit-runway");
+      if (!runway || !selectedCity) return;
+
+      const userNames = await fetchCityUserNames(selectedCity);
+      runway.innerHTML = "";
+      if (!userNames.length) return;
+
+      const parentWidth = runway.offsetWidth || 500;
+      const radius = (parentWidth / 2) - 24;
+      runway.style.setProperty("--orbit-radius", `${radius}px`);
+
+      const orbitDuration = 60;
+      const parentDiv = document.createElement("div");
+      parentDiv.className = "orbit-parent";
+
+      userNames.forEach((name, i) => {
+        const delay = -1 * (orbitDuration * (i / userNames.length));
+        const childDiv = document.createElement("div");
+        childDiv.className = "orbit-child";
+        childDiv.style.setProperty("--orbit-duration", `${orbitDuration}s`);
+        childDiv.style.setProperty("--orbit-delay", `${delay}s`);
+
+        const textSpan = document.createElement("span");
+        textSpan.className = "orbit-text";
+        textSpan.textContent = name;
+        childDiv.appendChild(textSpan);
+        parentDiv.appendChild(childDiv);
+      });
+
+      runway.appendChild(parentDiv);
     }
 
     // --- Alarm Countdown & Story Loading Logic ---
@@ -1085,36 +1109,8 @@
       }
       syncWakeupHereIdentity({ press: false });
 
-      // Populate orbiting co-waker names along the edge of the circle (tighter to edge)
-      const runway = document.getElementById("alarm-orbit-runway");
-      runway.innerHTML = "";
-      
-      const parentWidth = runway.offsetWidth || 500;
-      const radius = (parentWidth / 2) - 24; // cling tighter to circular outer border
-      runway.style.setProperty("--orbit-radius", `${radius}px`);
-      
-      const coWakers = getCoWakers(selectedCity.name_en);
-      const orbitDuration = 60; // 60 seconds for a complete rotation loop (slower speed)
-
-      const parentDiv = document.createElement("div");
-      parentDiv.className = "orbit-parent";
-      
-      coWakers.forEach((name, i) => {
-        const delay = -1 * (orbitDuration * (i / coWakers.length));
-        
-        const childDiv = document.createElement("div");
-        childDiv.className = "orbit-child";
-        childDiv.style.setProperty("--orbit-duration", `${orbitDuration}s`);
-        childDiv.style.setProperty("--orbit-delay", `${delay}s`);
-        
-        const textSpan = document.createElement("span");
-        textSpan.className = "orbit-text";
-        textSpan.textContent = `@${name}`;
-        
-        childDiv.appendChild(textSpan);
-        parentDiv.appendChild(childDiv);
-      });
-      runway.appendChild(parentDiv);
+      clearOrbitRunway();
+      renderCityUsersOrbit();
 
       // Reset story container
       const storyTextEl = document.getElementById("alarm-city-story");
@@ -1358,29 +1354,8 @@
       document.getElementById("alarm-city-name").textContent = selectedCity.name_zh + " // " + selectedCity.name_en;
       document.getElementById("alarm-country-name").textContent = selectedCountry.name_zh + " // UTC " + (selectedCity.utcOffset >= 0 ? "+" + selectedCity.utcOffset : selectedCity.utcOffset);
 
-      // Populate orbiting co-wakers
-      const runway = document.getElementById("alarm-orbit-runway");
-      runway.innerHTML = "";
-      const parentWidth = runway.offsetWidth || 500;
-      const radius = (parentWidth / 2) - 24; // cling tighter to circular outer border
-      runway.style.setProperty("--orbit-radius", `${radius}px`);
-      const coWakers = getCoWakers(selectedCity.name_en);
-      const orbitDuration = 60; // slower speed
-      const parentDiv = document.createElement("div");
-      parentDiv.className = "orbit-parent";
-      coWakers.forEach((name, i) => {
-        const delay = -1 * (orbitDuration * (i / coWakers.length));
-        const childDiv = document.createElement("div");
-        childDiv.className = "orbit-child";
-        childDiv.style.setProperty("--orbit-duration", `${orbitDuration}s`);
-        childDiv.style.setProperty("--orbit-delay", `${delay}s`);
-        const textSpan = document.createElement("span");
-        textSpan.className = "orbit-text";
-        textSpan.textContent = `@${name}`;
-        childDiv.appendChild(textSpan);
-        parentDiv.appendChild(childDiv);
-      });
-      runway.appendChild(parentDiv);
+      clearOrbitRunway();
+      renderCityUsersOrbit();
 
       // Load Story
       const storyTextEl = document.getElementById("alarm-city-story");

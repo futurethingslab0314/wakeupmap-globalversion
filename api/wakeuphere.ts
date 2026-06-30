@@ -176,6 +176,10 @@ function findCityProperties(properties: Record<string, unknown>, schema: Record<
   };
 }
 
+function getCityMatch(properties: Record<string, unknown>, schema: Record<string, NotionPropertyDefinition>) {
+  return findCityProperties(properties, schema);
+}
+
 async function loadMatchingPage(
   databaseId: string,
   apiKey: string,
@@ -263,10 +267,39 @@ export default async function handler(
       const cityEn = query.get("setup_city") || query.get("city") || "";
       const cityZh = query.get("setup_city_zh") || query.get("city_zh") || "";
       const userNameQuery = query.get("userName") || query.get("user_name") || "";
-      const matchedPage = await loadMatchingPage(pageId, notionApiKey, schema, cityEn, cityZh, userNameQuery);
+      const allPages = await loadAllPages(pageId, notionApiKey);
+      const normalizedCityEn = normalizeKey(cityEn);
+      const normalizedCityZh = normalizeKey(cityZh);
+      const normalizedUserName = normalizeKey(userNameQuery);
+      const matchedPages = allPages.filter((page) => {
+        const properties = page.properties ?? {};
+        const current = getCityMatch(properties, schema);
+        const normalizedSetupCity = normalizeKey(current.setupCity);
+        const normalizedSetupCityZh = normalizeKey(current.setupCityZh);
+        const normalizedCurrentUserName = normalizeKey(current.userName);
+        const cityMatches =
+          (normalizedCityEn && normalizedSetupCity === normalizedCityEn) ||
+          (normalizedCityZh && normalizedSetupCityZh === normalizedCityZh);
+        const userMatches = normalizedUserName && normalizedCurrentUserName === normalizedUserName;
+
+        if (normalizedCityEn || normalizedCityZh) {
+          return cityMatches;
+        }
+        if (normalizedUserName) {
+          return userMatches;
+        }
+        return Boolean(normalizedSetupCity || normalizedSetupCityZh || normalizedCurrentUserName);
+      });
+      const matchedPage = matchedPages[0] ?? {};
       const properties = matchedPage.properties ?? {};
-      const userName =
-        (userNameName ? readTextProperty(properties, userNameName, schema) : "") || DEFAULT_USER_NAME;
+      const userName = (userNameName ? readTextProperty(properties, userNameName, schema) : "") || DEFAULT_USER_NAME;
+      const users = matchedPages
+        .map((page) => {
+          const pageProperties = page.properties ?? {};
+          return userNameName ? readTextProperty(pageProperties, userNameName, schema) : "";
+        })
+        .map((value) => value.trim())
+        .filter((value, index, array) => Boolean(value) && array.indexOf(value) === index);
       const press =
         (pressName
           ? (schema[pressName]?.type === "checkbox"
@@ -279,6 +312,7 @@ export default async function handler(
         pageCount: 1,
         matched: Boolean(matchedPage.id),
         userName,
+        users,
         press,
       });
     }
