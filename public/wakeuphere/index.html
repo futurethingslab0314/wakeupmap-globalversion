@@ -603,6 +603,34 @@
     }
 
     const WAKEUPHERE_API_PATH = "/api/wakeuphere";
+    const USER_NAME_STORAGE_KEY = "wakeuphere.userName";
+
+    function getStoredUserName() {
+      try {
+        return (localStorage.getItem(USER_NAME_STORAGE_KEY) || "").trim() || "YuPie";
+      } catch {
+        return "YuPie";
+      }
+    }
+
+    function setStoredUserName(value) {
+      const nextValue = (value || "").trim() || "YuPie";
+      try {
+        localStorage.setItem(USER_NAME_STORAGE_KEY, nextValue);
+      } catch {
+        // Ignore storage failures.
+      }
+      selectedNotionUserName = nextValue;
+      const usernameEl = document.getElementById("alarm-username");
+      if (usernameEl) {
+        usernameEl.textContent = nextValue;
+      }
+      return nextValue;
+    }
+
+    async function fetchWakeupHereIdentity() {
+      setStoredUserName(getStoredUserName());
+    }
 
     async function syncWakeupHereIdentity(options = {}) {
       const { press = false } = options;
@@ -613,7 +641,7 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            userName: "YuPie",
+            userName: getStoredUserName(),
             setup_city: selectedCity?.name_en || "",
             setup_city_zh: selectedCity?.name_zh || "",
             setup_country: selectedCountry?.name_en || "",
@@ -632,7 +660,7 @@
     let selectedContinent = null;
     let selectedCountry = null;
     let selectedCity = null;
-    let selectedNotionUserName = "YuPie";
+    let selectedNotionUserName = getStoredUserName();
 
     // Simulation states
     let isSimulatingAlarm = false;
@@ -878,6 +906,8 @@
         setStage(2);
       } else if (currentStage === 2) {
         selectedCity = opt;
+        selectedNotionUserName = getStoredUserName();
+        fetchWakeupHereIdentity();
         syncWakeupHereIdentity({ press: false });
         setStage(3);
       }
@@ -917,6 +947,12 @@
         } else if (e.key === " ") {
           confirmResetModalSelection();
         }
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "u") {
+        e.preventDefault();
+        openUserNamePrompt();
         return;
       }
 
@@ -1532,6 +1568,17 @@
       window.location.href = "/";
     }
 
+    function openUserNamePrompt() {
+      const currentValue = getStoredUserName();
+      const nextValue = window.prompt("請輸入 userName", currentValue);
+      if (nextValue === null) return;
+      const stored = setStoredUserName(nextValue);
+      if (selectedCity) {
+        syncWakeupHereIdentity({ press: false });
+      }
+      console.log("WakeUpHere userName set to:", stored);
+    }
+
     // --- Bind DOM Button Triggers ---
     const cyclePrevBtn = document.getElementById("cycle-prev-btn");
     if (cyclePrevBtn) {
@@ -1561,6 +1608,7 @@
     // Startup
     window.addEventListener("DOMContentLoaded", () => {
       initMap();
+      setStoredUserName(getStoredUserName());
       loadDatabaseLocations().then(() => {
         setStage(0);
       });
