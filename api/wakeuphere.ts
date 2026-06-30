@@ -7,7 +7,6 @@ type NotionPageResponse = {
   properties?: Record<string, unknown>;
 };
 
-const WAKEUPHERE_PAGE_ID = "38ea7f1b413c803cb5b7c0c18811688e";
 const DEFAULT_USER_NAME = "YuPie";
 
 function normalizeKey(value: string): string {
@@ -41,6 +40,12 @@ function getSelectProperty(properties: Record<string, unknown>, key: string): st
   return typeof value?.name === "string" ? value.name : "";
 }
 
+function getCheckboxProperty(properties: Record<string, unknown>, key: string): boolean {
+  const property = properties[key];
+  if (typeof property !== "object" || property === null || !("checkbox" in property)) return false;
+  return Boolean((property as { checkbox?: unknown }).checkbox);
+}
+
 function findPropertyName(properties: Record<string, NotionPropertyDefinition>, type: string, aliases: string[]) {
   const aliasSet = new Set(aliases.map(normalizeKey));
   for (const [name, definition] of Object.entries(properties)) {
@@ -51,37 +56,12 @@ function findPropertyName(properties: Record<string, NotionPropertyDefinition>, 
   return undefined;
 }
 
-function readPropertyValue(properties: Record<string, unknown>, candidates: Array<{ type: string; aliases: string[] }>) {
-  for (const candidate of candidates) {
-    const propertyName = Object.keys(properties).find((name) => {
-      const definition = properties[name] as NotionPropertyDefinition | undefined;
-      return definition?.type === candidate.type && candidate.aliases.some((alias) => normalizeKey(alias) === normalizeKey(name));
-    });
-    if (!propertyName) continue;
-    if (candidate.type === "title") return getTitleProperty(properties, propertyName);
-    if (candidate.type === "rich_text") return getRichTextProperty(properties, propertyName);
-    if (candidate.type === "select") return getSelectProperty(properties, propertyName);
-  }
-  return "";
-}
-
 function buildTextProperty(value: string) {
   return { rich_text: [{ text: { content: value } }] };
 }
 
 function buildTitleProperty(value: string) {
   return { title: [{ text: { content: value } }] };
-}
-
-function buildPressProperty(pageProperties: Record<string, NotionPropertyDefinition>, pressValue: "yes") {
-  const pressName = findPropertyName(pageProperties, "select", ["press"]) ?? findPropertyName(pageProperties, "checkbox", ["press"]);
-  if (!pressName) return {};
-
-  const pressProperty = pageProperties[pressName];
-  if (pressProperty?.type === "checkbox") {
-    return { [pressName]: { checkbox: true } };
-  }
-  return { [pressName]: { select: { name: pressValue } } };
 }
 
 async function loadPage(pageId: string, apiKey: string): Promise<NotionPageResponse> {
@@ -92,14 +72,16 @@ async function loadPage(pageId: string, apiKey: string): Promise<NotionPageRespo
       "Notion-Version": "2022-06-28",
     },
   });
+
   if (!response.ok) {
     throw new Error(`Notion page fetch failed: ${response.status} ${await response.text()}`);
   }
+
   return (await response.json()) as NotionPageResponse;
 }
 
 export default async function handler(
-  request: { method?: string; body?: Record<string, unknown>; query?: Record<string, string | string[] | undefined> },
+  request: { method?: string; body?: Record<string, unknown> },
   response: {
     status(code: number): { json(payload: unknown): unknown };
     json(payload: unknown): unknown;
@@ -108,85 +90,94 @@ export default async function handler(
 ) {
   try {
     const notionApiKey = process.env.NOTION_API_KEY;
-    if (!notionApiKey) {
-      return response.status(500).json({ error: "Missing NOTION_API_KEY" });
+    const pageId = process.env.WAKEUPHERE_PAGE_ID;
+
+    if (!notionApiKey || !pageId) {
+      return response.status(500).json({ error: "Missing NOTION_API_KEY or WAKEUPHERE_PAGE_ID" });
     }
 
+    const page = await loadPage(pageId, notionApiKey);
+    const properties = page.properties ?? {};
+    const schema = properties as Record<string, NotionPropertyDefinition>;
+
+    const userNameName =
+      findPropertyName(schema, "title", ["userName", "user name", "name"]) ??
+      findPropertyName(schema, "rich_text", ["userName", "user name", "name"]);
+    const pressName =
+      findPropertyName(schema, "select", ["press"]) ??
+      findPropertyName(schema, "checkbox", ["press"]);
+    const setupCityName =
+      findPropertyName(schema, "rich_text", ["setup_city", "setup city", "city"]) ??
+      findPropertyName(schema, "title", ["setup_city", "setup city", "city"]);
+    const setupCityZhName =
+      findPropertyName(schema, "rich_text", ["setup_city_zh", "setup city zh", "city_zh", "city zh"]);
+    const setupCountryName =
+      findPropertyName(schema, "rich_text", ["setup_country", "setup country", "country"]) ??
+      findPropertyName(schema, "title", ["setup_country", "setup country", "country"]);
+    const setupCountryZhName =
+      findPropertyName(schema, "rich_text", ["setup_country_zh", "setup country zh", "country_zh", "country zh"]);
+
     if (request.method === "GET") {
-      const pageId = typeof request.query?.pageId === "string" ? request.query.pageId : WAKEUPHERE_PAGE_ID;
-      const selectedCityEn = typeof request.query?.city === "string" ? request.query.city : "";
-      const selectedCountryEn = typeof request.query?.country === "string" ? request.query.country : "";
-      const selectedCityZh = typeof request.query?.cityZh === "string" ? request.query.cityZh : "";
-      const selectedCountryZh = typeof request.query?.countryZh === "string" ? request.query.countryZh : "";
-
-      const page = await loadPage(pageId, notionApiKey);
-      const properties = page.properties ?? {};
-      const pageCity = readPropertyValue(properties, [
-        { type: "rich_text", aliases: ["setup_city", "setup city", "city"] },
-        { type: "title", aliases: ["setup_city", "setup city", "city"] },
-      ]);
-      const pageCountry = readPropertyValue(properties, [
-        { type: "rich_text", aliases: ["setup_country", "setup country", "country"] },
-        { type: "title", aliases: ["setup_country", "setup country", "country"] },
-      ]);
-
-      const pageCityZh = readPropertyValue(properties, [
-        { type: "rich_text", aliases: ["setup_city_zh", "setup city zh", "city_zh", "city zh"] },
-      ]);
-      const pageCountryZh = readPropertyValue(properties, [
-        { type: "rich_text", aliases: ["setup_country_zh", "setup country zh", "country_zh", "country zh"] },
-      ]);
-
-      const pageUserName = readPropertyValue(properties, [
-        { type: "title", aliases: ["userName", "user name", "name"] },
-        { type: "rich_text", aliases: ["userName", "user name", "name"] },
-      ]) || DEFAULT_USER_NAME;
-
-      const matched =
-        normalizeKey(pageCity) === normalizeKey(selectedCityEn) ||
-        normalizeKey(pageCityZh) === normalizeKey(selectedCityZh);
+      const userName =
+        (userNameName
+          ? (properties[userNameName] as { title?: unknown; rich_text?: unknown })?.title
+            ? getTitleProperty(properties, userNameName)
+            : getRichTextProperty(properties, userNameName)
+          : "") || DEFAULT_USER_NAME;
+      const press =
+        (pressName
+          ? (schema[pressName]?.type === "checkbox"
+            ? getCheckboxProperty(properties, pressName)
+            : getSelectProperty(properties, pressName) === "yes")
+          : false);
 
       return response.status(200).json({
-        matched,
-        userName: matched ? pageUserName : DEFAULT_USER_NAME,
-        setup_city: pageCity,
-        setup_city_zh: pageCityZh,
-        setup_country: pageCountry,
-        setup_country_zh: pageCountryZh,
         pageId,
+        userName,
+        press,
       });
     }
 
     if (request.method === "POST") {
       const body = request.body ?? {};
-      const pageId = typeof body.pageId === "string" ? body.pageId : WAKEUPHERE_PAGE_ID;
-      const page = await loadPage(pageId, notionApiKey);
-      const properties = page.properties ?? {};
+      const nextUserName = typeof body.userName === "string" && body.userName.trim() ? body.userName.trim() : DEFAULT_USER_NAME;
+      const nextPress = typeof body.press === "string" ? body.press : "yes";
+      const nextSetupCity = typeof body.setup_city === "string" ? body.setup_city : "";
+      const nextSetupCityZh = typeof body.setup_city_zh === "string" ? body.setup_city_zh : "";
+      const nextSetupCountry = typeof body.setup_country === "string" ? body.setup_country : "";
+      const nextSetupCountryZh = typeof body.setup_country_zh === "string" ? body.setup_country_zh : "";
       const updateProperties: Record<string, unknown> = {};
 
-      const userName = typeof body.userName === "string" && body.userName.trim() ? body.userName.trim() : DEFAULT_USER_NAME;
-      const setupCity = typeof body.setup_city === "string" ? body.setup_city : "";
-      const setupCityZh = typeof body.setup_city_zh === "string" ? body.setup_city_zh : "";
-      const setupCountry = typeof body.setup_country === "string" ? body.setup_country : "";
-      const setupCountryZh = typeof body.setup_country_zh === "string" ? body.setup_country_zh : "";
-      const press = typeof body.press === "string" ? body.press : "yes";
+      if (userNameName) {
+        updateProperties[userNameName] =
+          schema[userNameName]?.type === "title" ? buildTitleProperty(nextUserName) : buildTextProperty(nextUserName);
+      }
 
-      const userNameName = findPropertyName(properties as Record<string, NotionPropertyDefinition>, "title", ["userName", "user name", "name"]);
-      if (userNameName) updateProperties[userNameName] = buildTitleProperty(userName);
+      if (pressName) {
+        if (schema[pressName]?.type === "checkbox") {
+          updateProperties[pressName] = { checkbox: nextPress === "yes" };
+        } else {
+          updateProperties[pressName] = { select: { name: nextPress } };
+        }
+      }
 
-      const setupCityName = findPropertyName(properties as Record<string, NotionPropertyDefinition>, "rich_text", ["setup_city", "setup city", "city"]);
-      if (setupCityName) updateProperties[setupCityName] = buildTextProperty(setupCity);
+      if (setupCityName && nextSetupCity) {
+        updateProperties[setupCityName] =
+          schema[setupCityName]?.type === "title" ? buildTitleProperty(nextSetupCity) : buildTextProperty(nextSetupCity);
+      }
 
-      const setupCityZhName = findPropertyName(properties as Record<string, NotionPropertyDefinition>, "rich_text", ["setup_city_zh", "setup city zh", "city_zh", "city zh"]);
-      if (setupCityZhName) updateProperties[setupCityZhName] = buildTextProperty(setupCityZh);
+      if (setupCityZhName && nextSetupCityZh) {
+        updateProperties[setupCityZhName] = buildTextProperty(nextSetupCityZh);
+      }
 
-      const setupCountryName = findPropertyName(properties as Record<string, NotionPropertyDefinition>, "rich_text", ["setup_country", "setup country", "country"]);
-      if (setupCountryName) updateProperties[setupCountryName] = buildTextProperty(setupCountry);
+      if (setupCountryName && nextSetupCountry) {
+        updateProperties[setupCountryName] =
+          schema[setupCountryName]?.type === "title" ? buildTitleProperty(nextSetupCountry) : buildTextProperty(nextSetupCountry);
+      }
 
-      const setupCountryZhName = findPropertyName(properties as Record<string, NotionPropertyDefinition>, "rich_text", ["setup_country_zh", "setup country zh", "country_zh", "country zh"]);
-      if (setupCountryZhName) updateProperties[setupCountryZhName] = buildTextProperty(setupCountryZh);
-
-      Object.assign(updateProperties, buildPressProperty(properties as Record<string, NotionPropertyDefinition>, press === "yes" ? "yes" : "yes"));
+      if (setupCountryZhName && nextSetupCountryZh) {
+        updateProperties[setupCountryZhName] = buildTextProperty(nextSetupCountryZh);
+      }
 
       const updateResponse = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
         method: "PATCH",
@@ -205,8 +196,12 @@ export default async function handler(
       return response.status(200).json({
         ok: true,
         pageId,
-        userName,
-        press: "yes",
+        userName: nextUserName,
+        press: nextPress,
+        setup_city: nextSetupCity,
+        setup_city_zh: nextSetupCityZh,
+        setup_country: nextSetupCountry,
+        setup_country_zh: nextSetupCountryZh,
       });
     }
 
