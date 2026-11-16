@@ -41,6 +41,22 @@ sudo bash /tmp/install-wakeuphere-pi.sh --user futurethingslab0314 --reboot
 sudo bash /tmp/install-wakeuphere-pi.sh --check
 ```
 
+## 已經設定好的 Pi：不必強制升級
+
+若現有裝置已能正常開機全螢幕、搖桿方向與按壓正常，就可以保留原設定，**不用執行安裝器**。新版網站的部署自動更新是網頁功能，不依賴這支安裝器；本機搖桿程式也不會因 GitHub 網站更新而被自動替換。
+
+安裝器主要供新裝置或希望統一設定的設備使用。若選擇升級既有設備：
+
+1. 先記錄舊 `~/wakeuphere/joystick.py` 的 `INVERT_X`／`INVERT_Y`，以及其他自行修改的設定。
+2. 停止手動啟動的舊程式；由既有 `wakeuphere-joystick.service` 管理的程序會由安裝器停止並升級。
+3. 依前節下載最新版腳本，先用 `sudo bash /tmp/install-wakeuphere-pi.sh --check` 檢查。
+4. 用 `sudo bash /tmp/install-wakeuphere-pi.sh` 安裝，先不加 `--reboot`。成功後查看服務狀態與日誌，再自行重開機驗收。
+5. 舊 Python 內的方向反轉與自訂參數不會自動轉移；若需反轉，依維修章節修改 `/etc/default/wakeuphere-joystick`。
+
+升級沿用 Chromium 設定檔及網站名稱，更新同名搖桿服務並將執行路徑改到 `/opt/wakeuphere/`。安裝器只會識別先前教學的標準 autostart 寫法；若另外加過其他開機啟動方式，需先自行核對，避免重複執行。
+
+既有設定會備份，但不是自動回復機制；目前尚未完成真實 Pi 的完整升級驗收。因此，**已正常運作的這台可維持不變，先用新 Pi 測試安裝器**。
+
 ## 安裝內容
 
 1. 檢查 Pi 5、一般使用者、labwc／LightDM 與 Wayland session。
