@@ -47,6 +47,34 @@
     .wakeuphere-basemap {
       filter: invert(1) hue-rotate(180deg) saturate(0.25) brightness(0.7) contrast(1.1);
     }
+    /* Readable location tags on small Pi displays; keep the neon HUD palette. */
+    .map-location-label {
+      position: absolute;
+      left: 14px;
+      top: 0;
+      transform: translateY(-50%);
+      max-width: min(14rem, 42vmin);
+      width: max-content;
+      padding: 0.25rem 0.5rem;
+      border: 1px solid rgba(69, 233, 69, 0.55);
+      border-radius: 3px;
+      background: rgba(5, 5, 5, 0.96);
+      color: #d1d5db;
+      font-family: 'JetBrains Mono', 'Inter', sans-serif;
+      font-size: 0.875rem;
+      font-weight: 700;
+      line-height: 1.4;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      pointer-events: none;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.85);
+      transition: color 0.2s ease, border-color 0.2s ease;
+    }
+    .map-location-label.is-selected {
+      font-size: 1rem;
+      color: #45e945;
+      border-color: #45e945;
+    }
     #map-attribution {
       position: absolute;
       bottom: 5%;
@@ -782,24 +810,8 @@
                 border-radius: 50%;
                 pointer-events: none;
               "></div>
-              <!-- Mini HUD label tag -->
-              <div style="
-                position: absolute;
-                left: 12px;
-                top: -9px;
-                background-color: rgba(5, 5, 5, 0.9);
-                border: 1px solid ${isSelected ? '#45e945' : 'rgba(69, 233, 69, 0.3)'};
-                padding: 2.5px 5.5px;
-                border-radius: 2.5px;
-                font-family: 'JetBrains Mono', 'Inter', monospace;
-                font-size: 9px;
-                font-weight: bold;
-                color: ${isSelected ? '#45e945' : '#aaaaaa'};
-                white-space: nowrap;
-                pointer-events: none;
-                box-shadow: 0 0 5px rgba(0,0,0,0.8);
-                transition: all 0.25s ease;
-              ">
+              <!-- Larger HUD label; selected locations stay visually prominent. -->
+              <div class="map-location-label${isSelected ? ' is-selected' : ''}">
                 ${name}
               </div>
             </div>
@@ -810,7 +822,8 @@
         });
 
         const marker = L.marker(opt.coords, {
-          icon: nodeIcon
+          icon: nodeIcon,
+          zIndexOffset: isSelected ? 1000 : 0
         }).addTo(map);
 
         // Allow clicking on marker to select/pan to it!
@@ -1472,7 +1485,7 @@
           <div style="position: relative; transform: translate(-50%, -80%); display: flex; flex-direction: column; items-center; justify-content: center; width: 140px; height: 140px; pointer-events: none;">
             <div class="flex flex-col items-center justify-center">
               <!-- Glow label with bounce -->
-              <div class="bg-[#15803d] text-white border border-[#45e945] font-sans text-[12px] font-extrabold px-3 py-1 rounded shadow-[0_0_15px_rgba(69,233,69,0.7)] uppercase tracking-wider mb-2 whitespace-nowrap animate-bounce">
+              <div class="bg-[#15803d] text-white border border-[#45e945] font-sans text-base font-extrabold px-3 py-1 rounded shadow-[0_0_15px_rgba(69,233,69,0.7)] uppercase tracking-wider mb-2 whitespace-nowrap animate-bounce">
                 ${selectedCity.name_zh} 已抵達！
               </div>
               <!-- Ringing/Bouncing point -->
