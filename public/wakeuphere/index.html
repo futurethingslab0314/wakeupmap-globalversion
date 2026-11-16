@@ -2,6 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
+  <meta name="wakeuphere-build" content="__WAKEUPHERE_BUILD__" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>WakeUpHere - Cyber Map Alarm Console</title>
   
@@ -1596,14 +1597,77 @@
       exitBtn.addEventListener("click", exitPage);
     }
 
+    const UPDATE_STATE_KEY = "wakeuphere.updateSelection";
+
+    function saveSelectionForUpdate() {
+      try {
+        sessionStorage.setItem(UPDATE_STATE_KEY, JSON.stringify({
+          userName: getStoredUserName(),
+          continent: selectedContinent?.id,
+          country: selectedCountry?.name_en,
+          city: selectedCity?.name_en,
+          stage: currentStage,
+        }));
+      } catch { /* Storage may be unavailable; updating must still work. */ }
+    }
+
+    function restoreSelectionAfterUpdate() {
+      try {
+        const raw = sessionStorage.getItem(UPDATE_STATE_KEY);
+        sessionStorage.removeItem(UPDATE_STATE_KEY);
+        if (!raw) return false;
+        const saved = JSON.parse(raw);
+        if (saved.stage !== 3 || saved.userName !== getStoredUserName()) return false;
+        const continent = locationsByContinent.find(item => item.id === saved.continent);
+        const country = (locationsByCountry[continent?.id] || []).find(item => item.name_en === saved.country);
+        const city = (country?.cities || []).find(item => item.name_en === saved.city);
+        if (!continent || !country || !city) return false;
+        selectedContinent = continent;
+        selectedCountry = country;
+        selectedCity = city;
+        map.setView(city.coords, STAGE_ZOOMS[2]);
+        setStage(3);
+        return true;
+      } catch { return false; }
+    }
+
+    function startDeploymentUpdateChecks() {
+      const currentVersion = document.querySelector('meta[name="wakeuphere-build"]')?.content;
+      if (!currentVersion || !/^[a-f0-9-]{36}$/.test(currentVersion)) return;
+      const check = createWakeupHereUpdateChecker({
+        currentVersion,
+        fetchVersion: async () => {
+          const response = await fetch(`/wakeuphere/version.json?t=${Date.now()}`, {
+            cache: "no-store",
+            signal: AbortSignal.timeout(10000),
+          });
+          if (!response.ok) return null;
+          const data = await response.json();
+          return typeof data.version === "string" && /^[a-f0-9-]{36}$/.test(data.version) ? data.version : null;
+        },
+        canUpdate: () => !isAlarmRinging && !isResetModalOpen,
+        onUpdate: (version) => {
+          saveSelectionForUpdate();
+          const url = new URL(window.location.href);
+          url.searchParams.set("_wakeuphereVersion", version);
+          window.location.replace(url.toString());
+        },
+      });
+      check();
+      setInterval(check, 60000);
+      window.addEventListener("online", check);
+    }
+
     // Startup
     window.addEventListener("DOMContentLoaded", () => {
       initMap();
       setStoredUserName(getStoredUserName());
       loadDatabaseLocations().then(() => {
-        setStage(0);
+        if (!restoreSelectionAfterUpdate()) setStage(0);
+        startDeploymentUpdateChecks();
       });
     });
   </script>
+  <script src="/wakeuphere/auto-update.js?v=__WAKEUPHERE_BUILD__"></script>
 </body>
 </html>
