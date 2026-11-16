@@ -1,5 +1,7 @@
 # WakeUpHere 設計與 Raspberry Pi 安裝指南
 
+> 2026-11-16 更新：已加入 [真正的每日城市八點鬧鐘](wakeuphere-daily-alarm.md)，會保存並還原已選城市及排程。本文件後文未實作排程／不保存城市的描述是舊版狀態，現行行為以鬧鐘文件為準。
+
 > 2026-11-16 補充：Pi 5 搖桿接線、GPIO 相容性修正、開機與多台部署，請以 [最新硬體安裝手冊](wakeuphere-pi5-wiring-installation-and-fleet.md) 為準。網站已加入 [部署自動更新](wakeuphere-auto-update.md)，下文的手動重新整理描述為早期行為。
 
 更新日期：2026-11-11。依目前程式撰寫；本文的 Pi 安裝方式是部署建議，尚未在實體 Pi 上驗證。本文將「pie」視為 Raspberry Pi。

@@ -164,7 +164,8 @@ while true; do
     done
     [ ! -f "$HOME/.config/wakeuphere/maintenance" ] || continue
     chromium --user-data-dir="$HOME/.config/wakeuphere-chromium" \
-        --password-store=basic --kiosk --no-first-run "$url" || true
+        --password-store=basic --autoplay-policy=no-user-gesture-required \
+        --kiosk --no-first-run "$url" || true
     sleep 5
 done
 BROWSER

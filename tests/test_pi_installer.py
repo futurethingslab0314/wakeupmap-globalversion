@@ -78,6 +78,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn('ExecStart=/usr/bin/python3 -u /opt/wakeuphere/joystick.py', service)
         self.assertIn('Restart=on-failure', service)
         self.assertIn('--password-store=basic', (self.payload / 'start-browser.sh').read_text())
+        self.assertIn('--autoplay-policy=no-user-gesture-required', (self.payload / 'start-browser.sh').read_text())
 
     def test_broken_managed_section_is_not_silently_deleted(self):
         with self.assertRaises(ValueError):

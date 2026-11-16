@@ -10,7 +10,8 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test:server": "tsx --test src/server/__tests__/*.test.ts",
-    "test:wakeuphere-update": "node --test tests/wakeuphere-update.test.mjs"
+    "test:wakeuphere-update": "node --test tests/wakeuphere-update.test.mjs",
+    "test:wakeuphere-alarm": "node --test tests/wakeuphere-alarm*.test.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

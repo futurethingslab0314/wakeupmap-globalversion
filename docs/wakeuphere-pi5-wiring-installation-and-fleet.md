@@ -419,7 +419,7 @@ sudo journalctl -u wakeuphere-joystick.service -b -n 60 --no-pager
 
 已部署的新版每 60 秒檢查網站版本，不同版本才重整。斷網不重整，響鈴中延後；名稱保留，已完成選址會嘗試還原。第一次載入這個功能仍需先重新整理／重開機一次。詳見 [自動更新說明](wakeuphere-auto-update.md)。
 
-真正每日當地八點自動響鈴目前尚未實作；現有 Ctrl + H 是手動響鈴展示。不要把 kiosk 開機成功當成鬧鐘排程已完成。
+新版網頁已加入 [每日城市當地八點排程](wakeuphere-daily-alarm.md)，Ctrl + H 仍是獨立手動展示。舊 Pi 啟動器需依該文件補上無互動音效參數，並實測音訊輸出。
 
 ## 11. 多台部署：推薦做法
 
