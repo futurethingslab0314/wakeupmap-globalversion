@@ -363,6 +363,7 @@
           </div>
         </div>
 
+    <div id="booking-sync-status" class="hidden absolute bottom-[12%] left-1/2 -translate-x-1/2 w-[65vmin] z-40 rounded bg-black/90 px-2 py-1 text-center font-mono text-[2.2vmin] text-amber-300 pointer-events-none" role="status"></div>
   </div>
 
   <script>
@@ -683,26 +684,42 @@
       setStoredUserName(getStoredUserName());
     }
 
-    async function syncWakeupHereIdentity(options = {}) {
-      const { press = false } = options;
-      try {
-        const url = new URL(WAKEUPHERE_API_PATH, window.location.href);
+    let bookingQueue = null;
+    const BOOKING_OUTBOX_KEY = "wakeuphere.bookingOutbox";
 
-        await fetch(url.toString(), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userName: getStoredUserName(),
-            setup_city: selectedCity?.name_en || "",
-            setup_city_zh: selectedCity?.name_zh || "",
-            setup_country: selectedCountry?.name_en || "",
-            setup_country_zh: selectedCountry?.name_zh || "",
-            ...(press ? { press: "yes" } : {}),
-          }),
-        });
-      } catch (err) {
-        console.warn("WakeUpHere notion sync failed:", err);
-      }
+    function showBookingSyncState(state) {
+      const label = document.getElementById("booking-sync-status");
+      if (!label) return;
+      label.classList.toggle("hidden", state === "synced");
+      label.textContent = state === "pending" ? "預約同步中…" : "預約或名單尚未同步，將自動重試";
+    }
+
+    function getBookingQueue() {
+      if (!bookingQueue) bookingQueue = createWakeupHereBookingQueue({
+        read: () => JSON.parse(localStorage.getItem(BOOKING_OUTBOX_KEY) || "[]"),
+        write: items => localStorage.setItem(BOOKING_OUTBOX_KEY, JSON.stringify(items)),
+        onState: showBookingSyncState,
+        send: async payload => {
+          const response = await fetch(WAKEUPHERE_API_PATH, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload), signal: AbortSignal.timeout(10000),
+          });
+          const result = await response.json();
+          if (!response.ok || !result?.ok) throw new Error("Booking sync failed");
+        },
+      });
+      return bookingQueue;
+    }
+
+    function syncWakeupHereIdentity(options = {}) {
+      const { press = false, action = press ? "dismiss" : "reserve",
+        userName = getStoredUserName(), city = selectedCity, country = selectedCountry } = options;
+      // Capture values now: a delayed request must not use a newer selection.
+      return getBookingQueue().enqueue({
+        action, userName, setup_city: city?.name_en || "", setup_city_zh: city?.name_zh || "",
+        setup_country: country?.name_en || "", setup_country_zh: country?.name_zh || "",
+        ...(press ? { press: "yes" } : {}),
+      });
     }
 
     // --- Stage Manager State ---
@@ -1071,7 +1088,9 @@
       }
     }
 
-    async function fetchCityUserNames(city) {
+    let cityUsersRequestId = 0;
+
+    async function fetchCityUserNames(city, country) {
       try {
         const url = new URL(WAKEUPHERE_API_PATH, window.location.href);
         if (city?.name_en) {
@@ -1080,18 +1099,24 @@
         if (city?.name_zh) {
           url.searchParams.set("setup_city_zh", city.name_zh);
         }
+        if (country?.name_en) url.searchParams.set("setup_country", country.name_en);
+        if (country?.name_zh) url.searchParams.set("setup_country_zh", country.name_zh);
+        url.searchParams.set("t", String(Date.now()));
 
-        const response = await fetch(url.toString(), { method: "GET" });
+        const response = await fetch(url.toString(), { method: "GET", cache: "no-store", signal: AbortSignal.timeout(10000) });
         const data = await response.json();
-        if (!response.ok || !data || !Array.isArray(data.users)) return [];
+        if (!response.ok || !data || !Array.isArray(data.users)) throw new Error("Roster fetch failed");
+        showBookingSyncState("synced");
         return data.users.map((name) => String(name || "").trim()).filter(Boolean);
       } catch (err) {
         console.warn("Failed to load city user names:", err);
+        showBookingSyncState("error");
         return [];
       }
     }
 
     function clearOrbitRunway() {
+      cityUsersRequestId++;
       const runway = document.getElementById("alarm-orbit-runway");
       if (runway) {
         runway.innerHTML = "";
@@ -1102,7 +1127,15 @@
       const runway = document.getElementById("alarm-orbit-runway");
       if (!runway || !selectedCity) return;
 
-      const userNames = await fetchCityUserNames(selectedCity);
+      const requestId = ++cityUsersRequestId;
+      const city = selectedCity, country = selectedCountry;
+      // Read only after all pending writes (including cancellations) finish.
+      if (!await getBookingQueue().flush()) {
+        if (requestId === cityUsersRequestId) runway.innerHTML = "";
+        return;
+      }
+      const userNames = await fetchCityUserNames(city, country);
+      if (requestId !== cityUsersRequestId || currentStage !== 3 || city !== selectedCity || country !== selectedCountry) return;
       runway.innerHTML = "";
       if (!userNames.length) return;
 
@@ -1387,6 +1420,8 @@
 
     // --- Reset / Go back to Stage 0 ---
     function resetAlarm() {
+      if (currentStage === 3 && selectedCity) syncWakeupHereIdentity({ action: "cancel" });
+      clearOrbitRunway();
       if (alarmTimer) clearInterval(alarmTimer);
       alarmTimer = null;
       dailyAlarm = null;
@@ -1692,6 +1727,9 @@
       const currentValue = getStoredUserName();
       const nextValue = window.prompt("請輸入 userName", currentValue);
       if (nextValue === null) return;
+      if (currentStage === 3 && (nextValue.trim() || "YuPie") !== currentValue) {
+        syncWakeupHereIdentity({ action: "cancel", userName: currentValue });
+      }
       const stored = setStoredUserName(nextValue);
       console.log("WakeUpHere userName set to:", stored);
       if (currentStage === 3) startAlarmTick();
@@ -1791,10 +1829,21 @@
       loadDatabaseLocations().then(() => {
         if (!restoreSelectionAfterUpdate()) setStage(0);
         startDeploymentUpdateChecks();
+        getBookingQueue().flush();
+        setInterval(() => getBookingQueue().flush(), 15000);
+        setInterval(() => {
+          if (currentStage === 3 && selectedCity) renderCityUsersOrbit();
+        }, 60000);
+        window.addEventListener("online", () => {
+          getBookingQueue().flush().then(ok => {
+            if (ok && currentStage === 3 && selectedCity) renderCityUsersOrbit();
+          });
+        });
       });
     });
   </script>
   <script src="/wakeuphere/auto-update.js?v=__WAKEUPHERE_BUILD__"></script>
   <script src="/wakeuphere/alarm-scheduler.js?v=__WAKEUPHERE_BUILD__"></script>
+  <script src="/wakeuphere/booking-client.js?v=__WAKEUPHERE_BUILD__"></script>
 </body>
 </html>

@@ -7,13 +7,17 @@ const html = fs.readFileSync(new URL('../public/wakeuphere/index.html', import.m
 const main = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)]
   .map(match => match[1]).find(source => source.includes('class SoundService'));
 
-async function page(storage = new Map(), time = Date.parse('2026-11-16T16:59:59Z')) {
+async function page(storage = new Map(), time = Date.parse('2026-11-16T16:59:59Z'), options = {}) {
   let now = time, starts = 0, stops = 0;
-  const elements = new Map(), timers = new Map(); let timerId = 0;
+  const elements = new Map(), timers = new Map(), handlers = new Map(); let timerId = 0;
   function element(id) {
-    if (!elements.has(id)) elements.set(id, { textContent: '', innerHTML: '', style: {},
-      classList: { add() {}, remove() {}, toggle() {} }, addEventListener() {},
-      appendChild() {}, offsetWidth: 600 });
+    if (!elements.has(id)) {
+      const node = { textContent: '', children: [], style: { setProperty() {} },
+        classList: { add() {}, remove() {}, toggle() {} }, addEventListener() {},
+        appendChild(child) { this.children.push(child); }, offsetWidth: 600 };
+      Object.defineProperty(node,'innerHTML',{ get() {return ''}, set() {this.children=[];} });
+      elements.set(id,node);
+    }
     return elements.get(id);
   }
   const marker = () => ({ addTo() { return this; }, remove() {}, on() {} });
@@ -25,24 +29,25 @@ async function page(storage = new Map(), time = Date.parse('2026-11-16T16:59:59Z
     console: { log() {}, warn() {}, error(...args) { throw new Error(args.join(' ')); } },
     localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k,v) => storage.set(k,v), removeItem: k => storage.delete(k) },
     sessionStorage: { getItem: () => null, removeItem() {}, setItem() {} },
-    document: { getElementById: element, addEventListener() {}, createElement: () => element(Symbol()) },
-    window: { addEventListener() {}, location: { href: 'https://example.test/wakeuphere/' },
+    document: { getElementById: element, addEventListener() {}, querySelector:()=>null, createElement: () => element(Symbol()) },
+    window: { addEventListener(name,fn) { if(!handlers.has(name))handlers.set(name,[]);handlers.get(name).push(fn); }, location: { href: 'https://example.test/wakeuphere/' },
       CITIES_DATA: [{ city: 'Anchorage', city_zh: '安克拉治', country: 'United States', country_zh: '美國',
         timezone: 'America/Anchorage', latitude: 61.2, longitude: -149.9 }] },
     L: { divIcon: opts => opts, marker },
-    fetch: async () => ({ ok: true, json: async () => ({ users: [] }) }),
+    fetch: options.fetch ?? (async () => ({ ok: true, json: async () => ({ ok: true, users: [] }) })),
     setTimeout: () => 1,
     setInterval: (fn, ms) => { timers.set(++timerId, {fn,ms}); return timerId; },
     clearInterval: id => timers.delete(id),
     countStart: () => starts++, countStop: () => stops++,
   });
   vm.runInContext(fs.readFileSync(new URL('../public/wakeuphere/alarm-scheduler.js', import.meta.url), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(new URL('../public/wakeuphere/booking-client.js', import.meta.url), 'utf8'), ctx);
   vm.runInContext(main, ctx);
   vm.runInContext(`sound.playClick = () => {}; sound.playSuccess = () => {};
     sound.startAlarmRinging = countStart; sound.stopAlarmRinging = countStop;
     map = { setView() {}, setZoom() {}, panTo() {}, invalidateSize() {} };`, ctx);
   await vm.runInContext('loadDatabaseLocations()', ctx);
-  return { ctx, storage, elements, timers, run: code => vm.runInContext(code,ctx),
+  return { ctx, storage, elements, timers, handlers, run: code => vm.runInContext(code,ctx),
     time: value => now = Date.parse(value), starts: () => starts, stops: () => stops };
 }
 
@@ -91,4 +96,42 @@ test('choosing after 08:00 does not immediately fire; changing user does not inh
   const restored = await page(p.storage, Date.parse('2026-11-16T18:01:00Z'));
   assert.equal(restored.run('restoreSelectionAfterUpdate()'), false);
   assert.equal(restored.starts(),0);
+});
+
+const settle = () => new Promise(resolve => setImmediate(resolve));
+test('roster waits for reservation write and cancellation captures the old location', async () => {
+  let release; const events=[], payloads=[];
+  const p=await page(new Map(),Date.parse('2026-11-16T16:59:59Z'),{fetch:async(url,opts)=>{
+    if(opts.method==='POST'){
+      const payload=JSON.parse(opts.body);payloads.push(payload);events.push(payload.action);
+      if(payloads.length===1)await new Promise(resolve=>release=resolve);
+      events.push('written');return {ok:true,json:async()=>({ok:true})};
+    }
+    events.push('GET');return {ok:true,json:async()=>({users:['Bob']})};
+  }});
+  p.run('setStage(3)');assert.deepEqual(events,['reserve']);release();
+  await p.run('getBookingQueue().flush()');await settle();
+  assert(events.indexOf('GET')>events.indexOf('written'));
+  p.run('resetAlarm()');await p.run('getBookingQueue().flush()');
+  assert.equal(payloads.at(-1).action,'cancel');assert.equal(payloads.at(-1).setup_city,'Anchorage');
+});
+
+test('a delayed old-city response cannot replace the new-city roster', async () => {
+  let release;const p=await page(new Map(),Date.parse('2026-11-16T16:59:59Z'),{fetch:async(url,opts)=>{
+    if(opts.method==='POST')return {ok:true,json:async()=>({ok:true})};
+    if(String(url).includes('setup_city=Anchorage'))await new Promise(resolve=>release=resolve);
+    return {ok:true,json:async()=>({users:[String(url).includes('setup_city=Anchorage')?'Old':'New']})};
+  }});
+  p.run('setStage(3)');await p.run('getBookingQueue().flush()');await settle();
+  p.run('selectedCity = {...selectedCity, name_en:"Taipei", name_zh:"臺北", timezone:"Asia/Taipei"}; startAlarmTick();');
+  await p.run('getBookingQueue().flush()');await settle();release();await settle();
+  const names=p.elements.get('alarm-orbit-runway').children[0].children.map(child=>child.children[0].textContent);
+  assert.deepEqual(names,['New']);
+});
+
+test('startup installs a recurring roster refresh and outbox retry', async () => {
+  const p=await page();p.run('initMap=()=>{}');
+  p.handlers.get('DOMContentLoaded').at(-1)();await settle();
+  assert([...p.timers.values()].some(timer=>timer.ms===60000));
+  assert([...p.timers.values()].some(timer=>timer.ms===15000));
 });

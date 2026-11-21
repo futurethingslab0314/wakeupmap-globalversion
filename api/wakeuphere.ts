@@ -11,9 +11,15 @@ type NotionDatabaseResponse = {
   properties?: Record<string, NotionPropertyDefinition>;
 };
 
-type NotionQueryResponse = {
-  results?: Array<{ id?: string; properties?: Record<string, unknown> }>;
+type BookingPage = {
+  id?: string;
+  properties?: Record<string, unknown>;
+  created_time?: string;
+  last_edited_time?: string;
+  archived?: boolean;
+  in_trash?: boolean;
 };
+type NotionQueryResponse = { results?: BookingPage[] };
 
 const DEFAULT_USER_NAME = "YuPie";
 const CITY_KEYS = ["setup_city", "setup city", "city"];
@@ -67,11 +73,11 @@ function findPropertyName(properties: Record<string, NotionPropertyDefinition>, 
 }
 
 function buildTextProperty(value: string) {
-  return { rich_text: [{ text: { content: value } }] };
+  return { rich_text: value ? [{ text: { content: value } }] : [] };
 }
 
 function buildTitleProperty(value: string) {
-  return { title: [{ text: { content: value } }] };
+  return { title: value ? [{ text: { content: value } }] : [] };
 }
 
 async function loadDatabase(databaseId: string, apiKey: string): Promise<NotionDatabaseResponse> {
@@ -90,29 +96,8 @@ async function loadDatabase(databaseId: string, apiKey: string): Promise<NotionD
   return (await response.json()) as NotionDatabaseResponse;
 }
 
-async function loadFirstPage(databaseId: string, apiKey: string): Promise<{ id?: string; properties?: Record<string, unknown> }> {
-  const response = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Notion-Version": "2022-06-28",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      page_size: 1,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Notion query failed: ${response.status} ${await response.text()}`);
-  }
-
-  const payload = (await response.json()) as NotionQueryResponse;
-  return payload.results?.[0] ?? {};
-}
-
-async function loadAllPages(databaseId: string, apiKey: string): Promise<Array<{ id?: string; properties?: Record<string, unknown> }>> {
-  const pages: Array<{ id?: string; properties?: Record<string, unknown> }> = [];
+async function loadAllPages(databaseId: string, apiKey: string): Promise<BookingPage[]> {
+  const pages: BookingPage[] = [];
   let startCursor: string | undefined;
 
   for (;;) {
@@ -162,67 +147,74 @@ function readTextProperty(properties: Record<string, unknown>, key: string, sche
   return getRichTextProperty(properties, key) || getTitleProperty(properties, key);
 }
 
-function findCityProperties(properties: Record<string, unknown>, schema: Record<string, NotionPropertyDefinition>) {
-  const setupCity = readTextProperty(properties, CITY_KEYS[0], schema) || readTextProperty(properties, CITY_KEYS[1], schema) || readTextProperty(properties, CITY_KEYS[2], schema);
-  const setupCityZh = readTextProperty(properties, CITY_ZH_KEYS[0], schema) || readTextProperty(properties, CITY_ZH_KEYS[1], schema) || readTextProperty(properties, CITY_ZH_KEYS[2], schema) || readTextProperty(properties, CITY_ZH_KEYS[3], schema);
-  const userNameName =
-    findPropertyName(schema, "title", ["userName", "user name", "name"]) ??
-    findPropertyName(schema, "rich_text", ["userName", "user name", "name"]);
+const ACTIVE_FIELD = "wakeuphere_active";
+const UPDATED_FIELD = "wakeuphere_updated_at";
 
+function textField(schema: Record<string, NotionPropertyDefinition>, aliases: string[]) {
+  return findPropertyName(schema, "rich_text", aliases) ?? findPropertyName(schema, "title", aliases);
+}
+
+function booking(page: BookingPage, schema: Record<string, NotionPropertyDefinition>) {
+  const properties = page.properties ?? {};
+  const read = (aliases: string[]) => {
+    const key = textField(schema, aliases);
+    return key ? readTextProperty(properties, key, schema) : "";
+  };
+  const date = properties[UPDATED_FIELD] as { date?: { start?: string } | null } | undefined;
+  const updatedAt = Date.parse(date?.date?.start ?? "");
   return {
-    setupCity,
-    setupCityZh,
-    userName: userNameName ? readTextProperty(properties, userNameName, schema) : "",
+    page,
+    userName: read(["userName", "user name", "name"]),
+    city: read(CITY_KEYS), cityZh: read(CITY_ZH_KEYS),
+    country: read(["setup_country", "setup country", "country"]),
+    countryZh: read(["setup_country_zh", "setup country zh", "country_zh", "country zh"]),
+    active: getCheckboxProperty(properties, ACTIVE_FIELD),
+    updatedAt: Number.isFinite(updatedAt) ? updatedAt : 0,
   };
 }
 
-function getCityMatch(properties: Record<string, unknown>, schema: Record<string, NotionPropertyDefinition>) {
-  return findCityProperties(properties, schema);
+function latestBookings(pages: BookingPage[], schema: Record<string, NotionPropertyDefinition>) {
+  const latest = new Map<string, ReturnType<typeof booking>>();
+  const records = pages.filter(p => !p.archived && !p.in_trash).map(p => booking(p, schema));
+  const timestamp = (value?: string) => Date.parse(value ?? "") || 0;
+  records.sort((a, b) =>
+    Number(b.updatedAt > 0) - Number(a.updatedAt > 0) || b.updatedAt - a.updatedAt ||
+    timestamp(b.page.last_edited_time) - timestamp(a.page.last_edited_time) ||
+    timestamp(b.page.created_time) - timestamp(a.page.created_time) ||
+    (b.page.id ?? "").localeCompare(a.page.id ?? ""));
+  for (const record of records) {
+    const key = normalizeKey(record.userName);
+    if (key && !latest.has(key)) latest.set(key, record);
+  }
+  return [...latest.values()];
 }
 
-async function loadMatchingPage(
-  databaseId: string,
-  apiKey: string,
-  schema: Record<string, NotionPropertyDefinition>,
-  cityEn = "",
-  cityZh = "",
-  userName = "",
-): Promise<{ id?: string; properties?: Record<string, unknown> }> {
-  const normalizedCityEn = normalizeKey(cityEn);
-  const normalizedCityZh = normalizeKey(cityZh);
-  const normalizedUserName = normalizeKey(userName);
-  const hasCityMatchInput = Boolean(normalizedCityEn || normalizedCityZh);
-  const hasUserMatchInput = Boolean(normalizedUserName);
+function matchesLocation(record: ReturnType<typeof booking>, city: string, cityZh: string, country: string, countryZh: string) {
+  const matches = (en: string, zh: string, currentEn: string, currentZh: string) =>
+    Boolean((normalizeKey(en) && normalizeKey(en) === normalizeKey(currentEn)) ||
+      (normalizeKey(zh) && normalizeKey(zh) === normalizeKey(currentZh)));
+  return matches(city, cityZh, record.city, record.cityZh) &&
+    (!(country || countryZh) || matches(country, countryZh, record.country, record.countryZh));
+}
 
-  return (
-    (await loadAllPages(databaseId, apiKey)).find((page) => {
-      const properties = page.properties ?? {};
-      const current = findCityProperties(properties, schema);
-      const normalizedSetupCity = normalizeKey(current.setupCity);
-      const normalizedSetupCityZh = normalizeKey(current.setupCityZh);
-      const normalizedCurrentUserName = normalizeKey(current.userName);
-      const cityMatches =
-        (normalizedCityEn && normalizedSetupCity === normalizedCityEn) ||
-        (normalizedCityZh && normalizedSetupCityZh === normalizedCityZh);
-      const userMatches = normalizedUserName && normalizedCurrentUserName === normalizedUserName;
-
-      if (hasCityMatchInput && hasUserMatchInput) {
-        return cityMatches && userMatches;
-      }
-      if (hasCityMatchInput) {
-        return cityMatches;
-      }
-      if (hasUserMatchInput) {
-        return userMatches;
-      }
-
-      return (
-        Boolean(normalizedSetupCity) ||
-        Boolean(normalizedSetupCityZh) ||
-        Boolean(normalizedCurrentUserName)
-      );
-    }) ?? {}
-  );
+async function ensureBookingSchema(databaseId: string, apiKey: string, schema: Record<string, NotionPropertyDefinition>, needsCountry: boolean) {
+  const additions: Record<string, unknown> = {};
+  for (const [name, type] of [[ACTIVE_FIELD, "checkbox"], [UPDATED_FIELD, "date"]]) {
+    if (schema[name] && schema[name].type !== type) throw new Error(`Notion field ${name} must be ${type}`);
+    if (!schema[name]) additions[name] = { [type]: {} };
+  }
+  if (needsCountry && !textField(schema, ["setup_country", "setup country", "country"])) {
+    if (schema.setup_country) throw new Error("Notion setup_country must be a text field");
+    additions.setup_country = { rich_text: {} };
+  }
+  if (!Object.keys(additions).length) return;
+  const response = await fetch(`https://api.notion.com/v1/databases/${databaseId}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${apiKey}`, "Notion-Version": "2022-06-28", "Content-Type": "application/json" },
+    body: JSON.stringify({ properties: additions }),
+  });
+  if (!response.ok) throw new Error(`Cannot add booking fields to Notion database: ${response.status}`);
+  for (const [name, definition] of Object.entries(additions)) schema[name] = { type: Object.keys(definition as object)[0] };
 }
 
 export default async function handler(
@@ -233,201 +225,94 @@ export default async function handler(
     setHeader?(name: string, value: string | string[]): unknown;
   },
 ) {
+  response.setHeader?.("Cache-Control", "no-store");
   try {
-    const notionApiKey = process.env.NOTION_API_KEY;
-    const pageId = process.env.WAKEUPHERE_PAGE_ID;
-
-    if (!notionApiKey || !pageId) {
-      return response.status(500).json({ error: "Missing NOTION_API_KEY or WAKEUPHERE_PAGE_ID" });
+    if (request.method !== "GET" && request.method !== "POST") {
+      response.setHeader?.("Allow", "GET, POST");
+      return response.status(405).json({ error: "Method Not Allowed" });
     }
-
-    const database = await loadDatabase(pageId, notionApiKey);
+    const apiKey = process.env.NOTION_API_KEY;
+    const databaseId = process.env.WAKEUPHERE_PAGE_ID;
+    if (!apiKey || !databaseId) return response.status(500).json({ error: "Missing NOTION_API_KEY or WAKEUPHERE_PAGE_ID" });
+    const database = await loadDatabase(databaseId, apiKey);
     const schema = database.properties ?? {};
-
-    const userNameName =
-      findPropertyName(schema, "title", ["userName", "user name", "name"]) ??
-      findPropertyName(schema, "rich_text", ["userName", "user name", "name"]);
-    const pressName =
-      findPropertyName(schema, "select", ["press"]) ??
-      findPropertyName(schema, "checkbox", ["press"]);
-    const setupCityName =
-      findPropertyName(schema, "rich_text", ["setup_city", "setup city", "city"]) ??
-      findPropertyName(schema, "title", ["setup_city", "setup city", "city"]);
-    const setupCityZhName =
-      findPropertyName(schema, "rich_text", ["setup_city_zh", "setup city zh", "city_zh", "city zh"]);
-    const setupCountryName =
-      findPropertyName(schema, "rich_text", ["setup_country", "setup country", "country"]) ??
-      findPropertyName(schema, "title", ["setup_country", "setup country", "country"]);
-    const setupCountryZhName =
-      findPropertyName(schema, "rich_text", ["setup_country_zh", "setup country zh", "country_zh", "country zh"]);
-    const userNameFallback = DEFAULT_USER_NAME;
+    const userField = textField(schema, ["userName", "user name", "name"]);
+    const cityField = textField(schema, CITY_KEYS);
+    const cityZhField = textField(schema, CITY_ZH_KEYS);
+    let countryField = textField(schema, ["setup_country", "setup country", "country"]);
+    const countryZhField = textField(schema, ["setup_country_zh", "setup country zh", "country_zh", "country zh"]);
+    const pressField = findPropertyName(schema, "checkbox", ["press"]) ?? findPropertyName(schema, "select", ["press"]);
+    if (!userField || (!cityField && !cityZhField)) throw new Error("Notion database needs userName and city fields");
+    const records = latestBookings(await loadAllPages(databaseId, apiKey), schema);
 
     if (request.method === "GET") {
       const query = pickRequestQuery(request);
-      const cityEn = query.get("setup_city") || query.get("city") || "";
+      const city = query.get("setup_city") || query.get("city") || "";
       const cityZh = query.get("setup_city_zh") || query.get("city_zh") || "";
-      const userNameQuery = query.get("userName") || query.get("user_name") || "";
-      const allPages = await loadAllPages(pageId, notionApiKey);
-      const normalizedCityEn = normalizeKey(cityEn);
-      const normalizedCityZh = normalizeKey(cityZh);
-      const normalizedUserName = normalizeKey(userNameQuery);
-      const matchedPages = allPages.filter((page) => {
-        const properties = page.properties ?? {};
-        const current = getCityMatch(properties, schema);
-        const normalizedSetupCity = normalizeKey(current.setupCity);
-        const normalizedSetupCityZh = normalizeKey(current.setupCityZh);
-        const normalizedCurrentUserName = normalizeKey(current.userName);
-        const cityMatches =
-          (normalizedCityEn && normalizedSetupCity === normalizedCityEn) ||
-          (normalizedCityZh && normalizedSetupCityZh === normalizedCityZh);
-        const userMatches = normalizedUserName && normalizedCurrentUserName === normalizedUserName;
-
-        if (normalizedCityEn || normalizedCityZh) {
-          return cityMatches;
-        }
-        if (normalizedUserName) {
-          return userMatches;
-        }
-        return Boolean(normalizedSetupCity || normalizedSetupCityZh || normalizedCurrentUserName);
-      });
-      const matchedPage = matchedPages[0] ?? {};
-      const properties = matchedPage.properties ?? {};
-      const userName = (userNameName ? readTextProperty(properties, userNameName, schema) : "") || DEFAULT_USER_NAME;
-      const users = matchedPages
-        .map((page) => {
-          const pageProperties = page.properties ?? {};
-          return userNameName ? readTextProperty(pageProperties, userNameName, schema) : "";
-        })
-        .map((value) => value.trim())
-        .filter((value, index, array) => Boolean(value) && array.indexOf(value) === index);
-      const press =
-        (pressName
-          ? (schema[pressName]?.type === "checkbox"
-            ? getCheckboxProperty(properties, pressName)
-            : getSelectProperty(properties, pressName) === "yes")
-          : false);
-
-      return response.status(200).json({
-        pageId,
-        pageCount: 1,
-        matched: Boolean(matchedPage.id),
-        userName,
-        users,
-        press,
+      const country = query.get("setup_country") || query.get("country") || "";
+      const countryZh = query.get("setup_country_zh") || query.get("country_zh") || "";
+      const user = normalizeKey(query.get("userName") || query.get("user_name") || "");
+      // Deduplicate BEFORE filtering active/location: an inactive latest record
+      // must suppress all of that user's previous active locations.
+      const matched = records.filter(r => r.active && r.updatedAt > 0 && Boolean(r.city || r.cityZh) &&
+        (!user || normalizeKey(r.userName) === user) &&
+        (!(city || cityZh) || matchesLocation(r, city, cityZh, country, countryZh)));
+      const first = matched[0];
+      const properties = first?.page.properties ?? {};
+      return response.status(200).json({ pageId: databaseId, pageCount: matched.length,
+        matched: Boolean(first), userName: first?.userName ?? DEFAULT_USER_NAME,
+        users: matched.map(r => r.userName),
+        press: pressField ? schema[pressField]?.type === "checkbox" ? getCheckboxProperty(properties, pressField) : getSelectProperty(properties, pressField) === "yes" : false,
       });
     }
 
-    if (request.method === "POST") {
-      const body = request.body ?? {};
-      const nextUserName = typeof body.userName === "string" && body.userName.trim() ? body.userName.trim() : userNameFallback;
-      const hasPress = typeof body.press === "string";
-      const nextPress = hasPress ? body.press : "";
-      const nextSetupCity = typeof body.setup_city === "string" ? body.setup_city : "";
-      const nextSetupCityZh = typeof body.setup_city_zh === "string" ? body.setup_city_zh : "";
-      const nextSetupCountry = typeof body.setup_country === "string" ? body.setup_country : "";
-      const nextSetupCountryZh = typeof body.setup_country_zh === "string" ? body.setup_country_zh : "";
-      const matchedPage = await loadMatchingPage(pageId, notionApiKey, schema, nextSetupCity, nextSetupCityZh, nextUserName);
-      const pageIdToUpdate = matchedPage.id;
-      const updateProperties: Record<string, unknown> = {};
-      let requestMethod = "PATCH";
-
-      if (!pageIdToUpdate) {
-        requestMethod = "POST";
-        if (userNameName) {
-          updateProperties[userNameName] =
-            schema[userNameName]?.type === "title" ? buildTitleProperty(nextUserName) : buildTextProperty(nextUserName);
-        }
-        if (setupCityName && nextSetupCity) {
-          updateProperties[setupCityName] =
-            schema[setupCityName]?.type === "title" ? buildTitleProperty(nextSetupCity) : buildTextProperty(nextSetupCity);
-        }
-        if (setupCityZhName && nextSetupCityZh) {
-          updateProperties[setupCityZhName] = buildTextProperty(nextSetupCityZh);
-        }
-        if (setupCountryName && nextSetupCountry) {
-          updateProperties[setupCountryName] =
-            schema[setupCountryName]?.type === "title" ? buildTitleProperty(nextSetupCountry) : buildTextProperty(nextSetupCountry);
-        }
-        if (setupCountryZhName && nextSetupCountryZh) {
-          updateProperties[setupCountryZhName] = buildTextProperty(nextSetupCountryZh);
-        }
-        if (pressName && hasPress) {
-          if (schema[pressName]?.type === "checkbox") {
-            updateProperties[pressName] = { checkbox: nextPress === "yes" };
-          } else {
-            updateProperties[pressName] = { select: { name: nextPress || "yes" } };
-          }
-        }
-      } else {
-        if (userNameName) {
-          updateProperties[userNameName] =
-            schema[userNameName]?.type === "title" ? buildTitleProperty(nextUserName) : buildTextProperty(nextUserName);
-        }
-        if (pressName && hasPress) {
-          if (schema[pressName]?.type === "checkbox") {
-            updateProperties[pressName] = { checkbox: nextPress === "yes" };
-          } else {
-            updateProperties[pressName] = { select: { name: nextPress || "yes" } };
-          }
-        }
-        if (setupCityName && nextSetupCity) {
-          updateProperties[setupCityName] =
-            schema[setupCityName]?.type === "title" ? buildTitleProperty(nextSetupCity) : buildTextProperty(nextSetupCity);
-        }
-        if (setupCityZhName && nextSetupCityZh) {
-          updateProperties[setupCityZhName] = buildTextProperty(nextSetupCityZh);
-        }
-        if (setupCountryName && nextSetupCountry) {
-          updateProperties[setupCountryName] =
-            schema[setupCountryName]?.type === "title" ? buildTitleProperty(nextSetupCountry) : buildTextProperty(nextSetupCountry);
-        }
-        if (setupCountryZhName && nextSetupCountryZh) {
-          updateProperties[setupCountryZhName] = buildTextProperty(nextSetupCountryZh);
-        }
-      }
-
-      const targetUrl =
-        requestMethod === "POST"
-          ? `https://api.notion.com/v1/pages`
-          : `https://api.notion.com/v1/pages/${pageIdToUpdate}`;
-      const updateResponse = await fetch(targetUrl, {
-        method: requestMethod,
-        headers: {
-          Authorization: `Bearer ${notionApiKey}`,
-          "Notion-Version": "2022-06-28",
-          "Content-Type": "application/json",
-        },
-        body:
-          requestMethod === "POST"
-            ? JSON.stringify({
-                parent: { database_id: pageId },
-                properties: updateProperties,
-              })
-            : JSON.stringify({ properties: updateProperties }),
-      });
-
-      if (!updateResponse.ok) {
-        throw new Error(`Notion page ${requestMethod === "POST" ? "create" : "update"} failed: ${updateResponse.status} ${await updateResponse.text()}`);
-      }
-
-      return response.status(200).json({
-        ok: true,
-        pageId,
-        pageIdToUpdate: pageIdToUpdate || null,
-        created: requestMethod === "POST",
-        userName: nextUserName,
-        ...(hasPress ? { press: nextPress } : {}),
-        setup_city: nextSetupCity,
-        setup_city_zh: nextSetupCityZh,
-        setup_country: nextSetupCountry,
-        setup_country_zh: nextSetupCountryZh,
-      });
+    const body = request.body ?? {};
+    const user = typeof body.userName === "string" ? body.userName.trim() : "";
+    const action = body.action ?? (body.press === "yes" ? "dismiss" : "reserve");
+    const read = (name: string) => typeof body[name] === "string" ? (body[name] as string).trim() : "";
+    const city = read("setup_city"), cityZh = read("setup_city_zh");
+    const country = read("setup_country"), countryZh = read("setup_country_zh");
+    if (!user || !["reserve", "cancel", "dismiss"].includes(String(action)) ||
+        (action === "reserve" && !(city || cityZh))) {
+      return response.status(400).json({ error: "Valid userName, action and reservation city are required" });
     }
-
-    response.setHeader?.("Allow", "GET, POST");
-    return response.status(405).json({ error: "Method Not Allowed" });
+    const current = records.find(r => normalizeKey(r.userName) === normalizeKey(user));
+    const sameLocation = current && matchesLocation(current, city, cityZh, country, countryZh);
+    if (action !== "reserve" && (!current || !sameLocation || (action === "dismiss" && !current.active))) {
+      return response.status(200).json({ ok: true, ignored: true, action });
+    }
+    if (action !== "dismiss") {
+      await ensureBookingSchema(databaseId, apiKey, schema, action === "reserve" && Boolean(country));
+      countryField = textField(schema, ["setup_country", "setup country", "country"]);
+    }
+    const properties: Record<string, unknown> = {};
+    const setText = (key: string | undefined, value: string) => {
+      if (key) properties[key] = schema[key]?.type === "title" ? buildTitleProperty(value) : buildTextProperty(value);
+    };
+    setText(userField, user);
+    if (action === "reserve") {
+      setText(cityField, city); setText(cityZhField, cityZh);
+      setText(countryField, country); setText(countryZhField, countryZh);
+    }
+    if (action !== "dismiss") {
+      properties[ACTIVE_FIELD] = { checkbox: action === "reserve" };
+      properties[UPDATED_FIELD] = { date: { start: new Date().toISOString() } };
+    }
+    if (pressField && (action !== "reserve" || !current?.active || !sameLocation)) {
+      properties[pressField] = schema[pressField]?.type === "checkbox"
+        ? { checkbox: action === "dismiss" }
+        : { select: action === "dismiss" ? { name: "yes" } : null };
+    }
+    const id = current?.page.id;
+    const result = await fetch(id ? `https://api.notion.com/v1/pages/${id}` : "https://api.notion.com/v1/pages", {
+      method: id ? "PATCH" : "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Notion-Version": "2022-06-28", "Content-Type": "application/json" },
+      body: JSON.stringify(id ? { properties } : { parent: { database_id: databaseId }, properties }),
+    });
+    if (!result.ok) throw new Error(`Notion booking update failed: ${result.status}`);
+    return response.status(200).json({ ok: true, action, created: !id, userName: user, active: action !== "cancel",
+      setup_city: action === "reserve" ? city : current?.city, ...(action === "dismiss" ? { press: "yes" } : {}) });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return response.status(500).json({ error: message });
+    return response.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
   }
 }
