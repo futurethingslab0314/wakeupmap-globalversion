@@ -1,6 +1,7 @@
 import { createHash, createHmac } from "node:crypto";
 
 type WakeUpImageBody = {
+  awakeningRecord?: boolean;
   pageId?: string;
   city?: string;
   cityZh?: string;
@@ -515,6 +516,10 @@ async function updateNotionBreakfastProperties(
     patchProperties[imageStorageKeyName] = { url: payload.imageStorageKey };
   }
 
+  if (properties.wakeuphere_content_status?.type === "rich_text") {
+    patchProperties.wakeuphere_content_status = {rich_text:[{text:{content:"complete"}}]};
+  }
+
   const updateResponse = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
     method: "PATCH",
     headers: {
@@ -545,7 +550,28 @@ export default async function handler(
       return response.status(405).json({ error: "Method Not Allowed" });
     }
 
-    const body = request.body ?? {};
+    let body = request.body ?? {};
+    if (body.awakeningRecord) {
+      response.setHeader?.("Cache-Control", "no-store");
+      if (!body.pageId) return response.status(400).json({ error: "Missing awakening pageId" });
+      const pageResponse = await fetch(`https://api.notion.com/v1/pages/${encodeURIComponent(body.pageId)}`, {
+        headers: { Authorization: `Bearer ${process.env.NOTION_API_KEY}`, "Notion-Version": "2022-06-28" },
+      });
+      if (!pageResponse.ok) throw new Error(`Awakening image page fetch failed (${pageResponse.status})`);
+      const page = await pageResponse.json();
+      const p = page.properties ?? {};
+      const normalize = (s:string) => s.trim().toLowerCase().replace(/[\s_-]+/g, "");
+      const read = (aliases:string[]) => {
+        const key = Object.keys(p).find(name => aliases.some(alias => normalize(alias) === normalize(name)) && p[name]?.rich_text);
+        return key ? p[key].rich_text.map((part:any) => part.plain_text ?? part.text?.content ?? "").join("") : "";
+      };
+      if (page.archived || page.in_trash || !process.env.NOTION_DATABASE_ID || normalize(page.parent?.database_id || "") !== normalize(process.env.NOTION_DATABASE_ID) || !read(["wakeuphere_event_id"])) throw new Error("Page is not an awakening in the WakeUp Map database");
+      const imageName = Object.keys(p).find(name => ["imageurl","image"].includes(normalize(name)) && p[name]?.url);
+      if (imageName && read(["recipe"])) return response.status(200).json({ ok:true, imageUrl:p[imageName].url, existing:true });
+      const storedJob = JSON.parse(read(["wakeuphere_image_job"]) || "null");
+      if (!storedJob?.awakeningRecord || storedJob.pageId !== body.pageId) throw new Error("Prepare the awakening content before its image");
+      body = storedJob;
+    }
     if (!body.pageId || !body.city || !body.country || !body.recordedAtIso) {
       return response.status(400).json({ error: "Missing required wake-up image payload" });
     }

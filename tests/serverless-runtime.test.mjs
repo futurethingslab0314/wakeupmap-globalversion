@@ -9,7 +9,7 @@ import {pathToFileURL} from 'node:url';
 // Exercise emitted JS with Node's production ESM loader, without tsx resolving source extensions.
 test('compiled serverless API entrypoints load and handle requests without a TypeScript loader', async () => {
  const root=await mkdtemp(join(tmpdir(),'wakeup-serverless-test-'));
- const files=['api/notion-data.ts','api/wakeuphere.ts','api/wake-up-now.ts','src/wakeAcknowledgement.ts','src/server/services/wakeuphereAcknowledgement.ts','src/reservationMap.ts','src/server/services/wakeuphereMapBookings.ts'];
+ const files=['api/notion-data.ts','api/wakeuphere.ts','api/wake-up-now.ts','api/wake-up-image.ts','src/wakeAcknowledgement.ts','src/server/services/wakeuphereAcknowledgement.ts','src/reservationMap.ts','src/server/services/wakeuphereMapBookings.ts'];
  try {
   await writeFile(join(root,'package.json'),'{"type":"module"}');
   await cp('cities_data.json',join(root,'cities_data.json'));
@@ -18,7 +18,7 @@ test('compiled serverless API entrypoints load and handle requests without a Typ
    await mkdir(dirname(out),{recursive:true});
    await writeFile(out,ts.transpileModule(await readFile(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText);
   }
-  for(const endpoint of ['notion-data','wakeuphere']){
+  for(const endpoint of ['notion-data','wakeuphere','wake-up-now','wake-up-image']){
    const {default:handler}=await import(pathToFileURL(join(root,`api/${endpoint}.js`)));
    assert.equal(typeof handler,'function');
    const response={statusCode:200,setHeader(){},status(n){this.statusCode=n;return this;},json(body){this.body=body;return this;}};

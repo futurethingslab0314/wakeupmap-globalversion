@@ -19,6 +19,9 @@ interface DetailsPanelProps {
   onClose: () => void;
   hasBreakfastRefreshReady?: boolean;
   onRefreshBreakfast?: () => void;
+  awakeningContentError?: boolean;
+  onRetryAwakeningContent?: () => void;
+  onSelectRecord?: (record: NotionRecord) => void;
 }
 
 const DetailsPanel: React.FC<DetailsPanelProps> = ({
@@ -30,6 +33,7 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({
   onClose,
   hasBreakfastRefreshReady = false,
   onRefreshBreakfast,
+  awakeningContentError = false, onRetryAwakeningContent, onSelectRecord,
 }) => {
   if (!record && !country && !group) return null;
   const text = uiText[language];
@@ -127,9 +131,9 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({
                   ) : (
                     <div className="space-y-0">
                       {group.map((r, idx) => (
-                        <div
-                          key={r.id}
-                          className="flex items-center gap-6 p-6 border border-black/5 hover:border-accent-neon transition-colors"
+                        <button
+                          key={r.id} type="button" onClick={() => onSelectRecord?.(r)}
+                          className="flex w-full items-center gap-6 p-6 text-left border border-black/5 hover:border-accent-neon transition-colors"
                         >
                           <div className="font-mono text-xs text-gray-300 tabular-nums">
                             {String(idx + 1).padStart(2, '0')}
@@ -147,17 +151,20 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({
                           </div>
                           {/* Active Status Dot */}
                           <div className="w-2 h-2 bg-accent-neon rounded-full animate-pulse" />
-                        </div>
+                        </button>
                       ))}
                     </div>
                   )}
                 </section>
               ) : record?.mapPointKind === "reservation" ? (
                 <ReservationDetails record={record} language={language} actualRecord={records.find(r => r.id === record.linkedWakeRecordId)} />
-              ) : record?.wakeEventId ? (
-                <WakeAcknowledgementDetails record={record} language={language} />
               ) : record ? (
                 <>
+                  {record.wakeEventId && awakeningContentError ? <div role="alert" className="space-y-3 border border-black/10 p-4 font-mono text-xs leading-relaxed text-gray-600">
+                    <p>{language === "zh" ? "這個地方的介紹或早餐尚未完成，請重試。" : "The local introduction or breakfast could not finish. Please retry."}</p>
+                    {onRetryAwakeningContent ? <button onClick={onRetryAwakeningContent} className="border border-black px-3 py-2 text-[10px] uppercase tracking-widest text-black hover:bg-black hover:text-white">{language === "zh" ? "重新準備內容" : "Retry local content"}</button> : null}
+                  </div> : null}
+                  {record.wakeEventId && record.greeting && !record.greeting.startsWith("AWAKE //") ? <p dir="auto" className="font-serif text-3xl leading-relaxed text-gray-900">{record.greeting}</p> : null}
                   {/* Story Section */}
                   <section className="space-y-6">
                     <div className="flex items-center gap-3">
@@ -227,6 +234,10 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({
                       </button>
                     ) : null}
                   </section>
+                  {record.wakeEventId ? <details className="border-t border-black/10 pt-6">
+                    <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-widest text-gray-500">{language === "zh" ? "醒來確認與預約比較" : "Awakening confirmation & reservation"}</summary>
+                    <div className="pt-6"><WakeAcknowledgementDetails record={record} language={language} /></div>
+                  </details> : null}
                 </>
               ) : (
                 <div className="space-y-16">

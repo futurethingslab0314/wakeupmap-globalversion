@@ -9,10 +9,10 @@ import {buildReservationMapState,type WakeReservation} from '../src/reservationM
 import type {NotionRecord} from '../src/types';
 const booking:WakeReservation={id:'b',userName:'YuPie',city:'Dubai',cityZh:'迪拜',country:'United Arab Emirates',countryZh:'阿聯酋',latitude:25,longitude:55,timeZone:'Asia/Dubai',bookedAt:'2026-11-20T00:00:00Z',scheduledAt:'2026-11-21T04:00:00Z'};
 const target=buildReservationMapState([],[booking],new Date('2026-11-21T03:00:00Z')).targets[0];
-test('filter has three accessible choices with legend and city-local date explanation',()=>{
+test('filter has three compact accessible choices without gray explanatory paragraphs',()=>{
  const html=renderToStaticMarkup(<WakeMapFilter value="reservations" onChange={()=>{}} language="zh" pendingCount={1} actualCount={0}/>);
  assert.match(html,/預約位置/);assert.match(html,/實際位置/);assert.match(html,/全部/);
- assert.match(html,/aria-pressed="true"/);assert.match(html,/預約城市當地日期/);
+ assert.match(html,/aria-pressed="true"/);assert.doesNotMatch(html,/<p[ >]/);assert.doesNotMatch(html,/min-h-10/);
 });
 test('pending journal entry shows reserved city and awaiting state rather than an actual wake location',()=>{
  const html=renderToStaticMarkup(<table><tbody><JournalRecordRow record={target} language="zh" highlighted={false} onHover={()=>{}} onSelect={()=>{}}/></tbody></table>);
@@ -44,4 +44,13 @@ test('globe layer hides comparisons in reserved-only mode and retains the 0 km l
  const reserved=renderToStaticMarkup(<svg><Layer {...props} filter="reservations"/></svg>);
  assert.doesNotMatch(reserved,/0\.0 km/);
  assert.equal(renderToStaticMarkup(<svg><Layer {...props} filter="actual"/></svg>),'<svg></svg>');
+});
+
+test('map filters and language options share the same compact button sizing',async()=>{
+ const {default:MapToolbar}=await import('../src/components/MapToolbar');
+ const html=renderToStaticMarkup(<MapToolbar language="en" onLanguageChange={()=>{}} value="all" onFilterChange={()=>{}} pendingCount={1} actualCount={17}/>);
+ assert.match(html,/data-map-toolbar="true"/);assert.match(html,/aria-label="Language"/);assert.doesNotMatch(html,/Orange ring|Reservations: today/);
+ const buttons=[...html.matchAll(/<button[^>]*class="([^"]+)"/g)].map(match=>match[1]);
+ assert.equal(buttons.length,5);
+ for(const button of buttons)for(const token of ['px-1.5','py-1','text-[9px]','lg:text-[10px]','leading-[15px]'])assert(button.includes(token),token);
 });

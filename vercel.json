@@ -1,10 +1,14 @@
 {
   "functions": {
     "api/wake-up-now.ts": {
-      "includeFiles": "cities_data.json"
+      "includeFiles": "cities_data.json",
+      "maxDuration": 60
     },
     "api/wakeuphere.ts": {
       "includeFiles": "cities_data.json",
+      "maxDuration": 60
+    },
+    "api/wake-up-image.ts": {
       "maxDuration": 60
     }
   },

@@ -1,9 +1,14 @@
 import type { UiLanguage } from "./i18n";
-import { getRecordRecipe } from "./i18n";
+import { getRecordRecipe, getRecordStory } from "./i18n";
 import type { NotionRecord } from "./types";
 
 export function isRecordPreparing(record: NotionRecord | null, language: UiLanguage): boolean {
-  return !!record && !record.wakeEventId && record.mapPointKind !== "reservation" && !record.imageUrl && !getRecordRecipe(record, language);
+  if (!record || record.mapPointKind === "reservation") return false;
+  if (record.wakeEventId) {
+    const story = getRecordStory(record, language);
+    return !record.imageUrl || !getRecordRecipe(record, language) || !record.greeting || record.greeting.startsWith("AWAKE //") || !story || story.startsWith("WakeUpHere alarm acknowledged.") || story.startsWith("已按下 WakeUpHere");
+  }
+  return !record.imageUrl && !getRecordRecipe(record, language);
 }
 
 export function getCompletedRecordFromSnapshot(

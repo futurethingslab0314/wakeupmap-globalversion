@@ -15,7 +15,8 @@
     "test:wakeuphere-bookings": "node --import tsx --test tests/wakeuphere-bookings.test.ts tests/wakeuphere-booking-client.test.mjs",
     "test:wakeuphere-awake": "node --import tsx --test tests/wakeuphere-awake.test.ts tests/wakeuphere-map-display.test.ts",
     "test:serverless": "node --test tests/serverless-runtime.test.mjs",
-    "test:reservation-map": "node --import tsx --test tests/reservation-map.test.ts tests/reservation-map-ui.test.tsx"
+    "test:reservation-map": "node --import tsx --test tests/reservation-map.test.ts tests/reservation-map-ui.test.tsx",
+    "test:awakening-content": "node --import tsx --test tests/awakening-content.test.ts tests/awakening-content-client.test.ts tests/wakeuphere-map-display.test.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

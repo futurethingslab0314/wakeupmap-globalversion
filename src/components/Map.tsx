@@ -514,8 +514,12 @@ const Map: React.FC<MapProps> = ({
                   scale: isHighlighted ? 1.2 : 1,
                 }}
                 onClick={handleRecordSelect}
+                role="button" tabIndex={0}
+                aria-label={record.wakeEventId ? `${language === "zh" ? "實際甦醒位置" : "Actual awakening"} · ${cityLabel}` : cityLabel}
+                onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); handleRecordSelect(); } }}
                 className="cursor-pointer"
               >
+                <circle r={getStableSvgSize(12, overlayScale)} fill="transparent" pointerEvents="all" />
                 {/* Small Solid Black Dot Marker */}
                 <circle
                   r={markerRadius}
@@ -524,7 +528,7 @@ const Map: React.FC<MapProps> = ({
                 
                 {record.wakeEventId ? <>
                   <title>{`${language === "zh" ? "實際甦醒位置" : "Actual awakening"} · ${cityLabel}`}</title>
-                  <text y={16} textAnchor="middle" fontSize={getStableSvgSize(11, overlayScale)} fontFamily="monospace" fill="black" stroke="white" strokeWidth={3} paintOrder="stroke">{language === "zh" ? "實際甦醒位置" : "Actual awakening"} · {cityLabel}</text>
+                  <text y={getStableSvgSize(18, overlayScale)} textAnchor="middle" fontSize={getStableSvgSize(11, overlayScale)} fontFamily="monospace" fill="black" stroke="white" strokeWidth={3} paintOrder="stroke">{language === "zh" ? "實際甦醒位置" : "Actual awakening"} · {cityLabel}</text>
                 </> : null}
                 {/* Selection Ring - neon green glow */}
                 {isSelected && (

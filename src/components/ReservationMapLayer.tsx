@@ -20,7 +20,7 @@ export default function ReservationMapLayer({targets,pairs,filter,projection,isV
    const shortArc=start&&end&&Math.hypot(start[0]-end[0],start[1]-end[1])<fontSize*12;
    return <g key={`comparison:${pair.actual.id}`} aria-label={`${pair.target.city} → ${pair.actual.city}: ${pair.distanceKm.toFixed(1)} km`}>
     {segments.map((segment,index)=><path key={index} d={toSvgPath(segment)||undefined} stroke="#b66028" strokeWidth={1.1} strokeDasharray="3 3" fill="none" pointerEvents="none"/>)}
-    {label?<text x={label.x} y={label.y+(shortArc?34:-5)} textAnchor="middle" fontSize={fontSize} fontFamily="monospace" fill="#904214" stroke="white" strokeWidth={3} paintOrder="stroke" pointerEvents="none">{pair.distanceKm.toFixed(1)} km</text>:null}
+    {label?<text x={label.x} y={label.y+(shortArc?fontSize*3.7:-fontSize*0.5)} textAnchor="middle" fontSize={fontSize} fontFamily="monospace" fill="#904214" stroke="white" strokeWidth={3} paintOrder="stroke" pointerEvents="none">{pair.distanceKm.toFixed(1)} km</text>:null}
    </g>;
   })}
   {targets.map(target=>{
@@ -34,7 +34,7 @@ export default function ReservationMapLayer({targets,pairs,filter,projection,isV
     <title>{`${target.userName} // ${label} // ${target.wakeTargetTimeZone}`}</title>
     <circle r={12} fill="transparent"/>
     <circle r={selectedId===target.id?7:5.5} fill="none" stroke="#c46320" strokeWidth={1.7}/>
-    <text y={-12} textAnchor="middle" fontSize={fontSize} fontFamily="monospace" fill="#a95018" stroke="white" strokeWidth={3} paintOrder="stroke">{label}</text>
+    <text y={-fontSize*1.5} textAnchor="middle" fontSize={fontSize} fontFamily="monospace" fill="#a95018" stroke="white" strokeWidth={3} paintOrder="stroke">{label}</text>
    </g>;
   })}
  </g>;

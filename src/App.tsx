@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import WakeMapFilter from "./components/WakeMapFilter";
+import MapToolbar from "./components/MapToolbar";
+import { ensureAwakeningContent } from "./services/awakeningContent";
 import JournalRecordRow from "./components/JournalRecordRow";
 import { buildReservationMapState, getReservationJournalRows, filterReservationsForUser, getLocalDate, type WakeReservation, type WakeMapFilter as MapLayerFilter } from "./reservationMap";
 import Map from "./components/Map";
@@ -46,6 +47,8 @@ export default function App() {
   const [reservations, setReservations] = useState<WakeReservation[]>([]);
   const [reservationError, setReservationError] = useState(false);
   const latestReservationRequest = useRef(0);
+  const [awakeningContentError, setAwakeningContentError] = useState(false);
+  const [awakeningRetry, setAwakeningRetry] = useState(0);
   const [layerFilter, setLayerFilter] = useState<MapLayerFilter>("all");
   const [records, setRecords] = useState<NotionRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<NotionRecord | null>(null);
@@ -106,7 +109,7 @@ export default function App() {
   const visibleReservations = React.useMemo(() => isNameConfirmed ? filterReservationsForUser(reservations, userName) : reservations, [reservations, isNameConfirmed, userName]);
   const personalReservationState = React.useMemo(() => buildReservationMapState(visibleRecords, visibleReservations, currentTime), [visibleRecords, visibleReservations, currentTime]);
   const reservationState = React.useMemo(() => showWakeupToday ? buildReservationMapState(records, reservations, currentTime) : personalReservationState, [showWakeupToday, records, reservations, currentTime, personalReservationState]);
-  const selectableRecords = React.useMemo(() => [...visibleRecords, ...reservationState.targets], [visibleRecords, reservationState.targets]);
+  const selectableRecords = React.useMemo(() => [...(showWakeupToday ? records : visibleRecords), ...reservationState.targets], [showWakeupToday, records, visibleRecords, reservationState.targets]);
   const showIdentityEmptyState = isNameConfirmed && !loading && visibleRecords.length === 0 && personalReservationState.targets.length === 0 && !showWakeupToday;
   const hasReadyBreakfastRefresh = !!selectedRecord && readyBreakfastRecordId === selectedRecord.id;
 
@@ -248,6 +251,22 @@ export default function App() {
       }
     }
   }, [loadRecordsSnapshot]);
+
+  useEffect(() => {
+    if (!selectedRecord?.wakeEventId || selectedRecord.mapPointKind === "reservation" || !isRecordPreparing(selectedRecord, language)) {
+      setAwakeningContentError(false);
+      return;
+    }
+    let active = true;
+    setAwakeningContentError(false);
+    void ensureAwakeningContent(selectedRecord.id, {
+      onTextReady: () => fetchData({ showLoading: false }),
+    }).then(() => fetchData({ showLoading: false })).catch(error => {
+      console.error("Awakening content generation failed:", error);
+      if (active) setAwakeningContentError(true);
+    });
+    return () => { active = false; };
+  }, [selectedRecord?.id, selectedRecord?.wakeEventId, selectedRecord?.mapPointKind, selectedRecord?.imageUrl, selectedRecord?.recipe, selectedRecord?.recipe_zh, language, awakeningRetry, fetchData]);
 
   const checkBreakfastReadiness = useCallback(async (targetRecord?: NotionRecord | null) => {
     const recordToCheck = targetRecord ?? selectedRecord;
@@ -779,6 +798,13 @@ export default function App() {
     );
   }
 
+  const renderMapToolbar = (showFilter = true) => <div className="relative max-w-full">
+    <MapToolbar language={language} onLanguageChange={setLanguage} value={layerFilter}
+      onFilterChange={value => { setLayerFilter(value); setSelectedRecord(null); setSelectedCountry(null); setSelectedGroup(null); soundService.playClick(); }}
+      pendingCount={reservationState.targets.length} actualCount={showWakeupToday ? todayRecords.length : visibleRecords.length} showFilter={showFilter} />
+    {showFilter && reservationError ? <p role="status" className="absolute right-0 top-full mt-2 max-w-[360px] bg-white/95 px-2 py-1 font-mono text-[10px] leading-relaxed text-[#a95018]">{language === "zh" ? "預約資料暫時無法更新，保留上次資料並自動重試。" : "Reservations could not refresh. Keeping the last snapshot and retrying."}</p> : null}
+  </div>;
+
   return (
     <div className="relative w-screen h-[100dvh] overflow-hidden font-sans select-none bg-white">
       {/* Background Storm (Radial Emission & Grid Core) */}
@@ -837,21 +863,11 @@ export default function App() {
           todayRecords={todayRecords}
           onSelectGroup={(group) => {
             soundService.playClick();
-            setSelectedGroup(group);
+            if (group.length === 1) { setSelectedRecord(group[0]); setSelectedGroup(null); }
+            else setSelectedGroup(group);
           }}
         />
       </motion.div>
-
-      {!showEntryScreen && !showDatabase && !hasDetailPanelOpen ? (
-        <div className="absolute left-4 right-4 z-30 max-w-[390px] pointer-events-auto lg:left-auto lg:right-10 lg:top-28 lg:max-w-[390px]" style={isMobileViewport ? { top: "calc(var(--safe-top) + 164px)" } : undefined}>
-          <WakeMapFilter value={layerFilter} onChange={value => {
-            setLayerFilter(value); setSelectedRecord(null); setSelectedCountry(null); setSelectedGroup(null);
-            soundService.playClick();
-          }} language={language} pendingCount={reservationState.targets.length} actualCount={showWakeupToday ? todayRecords.length : visibleRecords.length} />
-          {reservationError ? <p role="status" className="mt-2 bg-white/95 px-2 py-1 font-mono text-[10px] leading-relaxed text-[#a95018]">{language === "zh" ? "預約資料暫時無法更新，保留上次資料並自動重試。" : "Reservations could not refresh. Keeping the last snapshot and retrying."}</p> : null}
-          {layerFilter === "reservations" && reservationState.targets.length === 0 && !reservationError ? <p role="status" className="mt-2 bg-white/95 px-2 py-1 font-mono text-[10px] text-gray-500">{language === "zh" ? "今天沒有有效預約。" : "No valid reservations for today."}</p> : null}
-        </div>
-      ) : null}
 
       {/* Top Left: Header & Menu */}
       <motion.div 
@@ -1051,24 +1067,9 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-gray-400">
-                  <Globe2 className="h-3.5 w-3.5 shrink-0" />
-                  <div className="flex border border-black/10 bg-white/90">
-                    <button
-                      onClick={() => setLanguage("en")}
-                      className={`px-3 py-1 transition-colors ${language === "en" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
-                    >
-                      {text.english}
-                    </button>
-                    <button
-                      onClick={() => setLanguage("zh")}
-                      className={`px-3 py-1 transition-colors ${language === "zh" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
-                    >
-                      {text.chinese}
-                    </button>
-                  </div>
-                </div>
               </div>
+
+              {renderMapToolbar()}
 
               <div className="pointer-events-auto flex flex-col gap-3 border border-black/10 bg-white/90 p-3 backdrop-blur-sm">
                 <p className={getMobileCurrentBaseLabelClassName()}>
@@ -1159,30 +1160,10 @@ export default function App() {
         </motion.div>
       )}
 
-      {/* Top Right: Language Toggle */}
+      {/* Map filters and language share one compact toolbar. */}
       {!isMobileViewport && languageToggleState.show && (
-        <div
-          className={`absolute top-6 lg:top-10 z-10 pointer-events-auto transition-all ${
-            languageToggleState.position === "left" ? "left-6 lg:left-10" : "right-6 lg:right-10"
-          }`}
-        >
-          <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.2em] text-gray-400">
-            <Globe2 className="w-3.5 h-3.5" />
-            <div className="flex border border-black/10">
-              <button
-                onClick={() => setLanguage("en")}
-                className={`px-3 py-1 transition-colors ${language === "en" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
-              >
-                {text.english}
-              </button>
-              <button
-                onClick={() => setLanguage("zh")}
-                className={`px-3 py-1 transition-colors ${language === "zh" ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}
-              >
-                {text.chinese}
-              </button>
-            </div>
-          </div>
+        <div className={`absolute top-6 lg:top-10 z-50 pointer-events-auto transition-all ${languageToggleState.position === "left" ? "left-6 lg:left-10" : "right-6 lg:right-10"}`}>
+          {renderMapToolbar(!showEntryScreen && !showDatabase && !hasDetailPanelOpen)}
         </div>
       )}
 
@@ -1336,6 +1317,9 @@ export default function App() {
         group={selectedGroup}
         records={showWakeupToday ? records : visibleRecords}
         language={language}
+        awakeningContentError={awakeningContentError}
+        onRetryAwakeningContent={() => setAwakeningRetry(value => value + 1)}
+        onSelectRecord={record => { setSelectedRecord(record); setSelectedGroup(null); setSelectedCountry(null); }}
         hasBreakfastRefreshReady={hasReadyBreakfastRefresh}
         onRefreshBreakfast={hasReadyBreakfastRefresh ? refreshReadyBreakfast : undefined}
         onClose={() => {

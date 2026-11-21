@@ -11,6 +11,8 @@ import { createOpenAIClient } from "./src/server/services/openai";
 import { createR2Client } from "./src/server/services/r2";
 import wakeupHereHandler from "./api/wakeuphere";
 import notionDataHandler from "./api/notion-data";
+import productionWakeUpNowHandler from "./api/wake-up-now";
+import productionWakeUpImageHandler from "./api/wake-up-image";
 
 dotenv.config();
 
@@ -25,6 +27,15 @@ async function startServer() {
     await notionDataHandler(req, res);
   });
   app.all("/api/wakeuphere", async (req, res) => { await wakeupHereHandler(req, res); });
+
+  app.post("/api/wake-up-now", async (req, res, next) => {
+    if (req.body?.action === "complete-awakening") await productionWakeUpNowHandler(req, res);
+    else next();
+  });
+  app.post("/api/wake-up-image", async (req, res, next) => {
+    if (req.body?.awakeningRecord) await productionWakeUpImageHandler(req, res);
+    else next();
+  });
 
   app.post(
     "/api/wake-up-now",

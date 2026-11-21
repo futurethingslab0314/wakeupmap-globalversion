@@ -39,6 +39,8 @@ type WorldCity = {
 };
 
 type WakeUpNowBody = {
+  action?: "complete-awakening";
+  pageId?: string;
   language?: "en" | "zh";
   userName?: string;
   nowUtcIso?: string;
@@ -1182,6 +1184,85 @@ function buildNotionProperties(
   return properties;
 }
 
+// Enrich an already captured awakening; never reselect its city or create a page.
+async function completeAwakeningContent(pageId: string, apiKey: string, databaseId: string) {
+  const headers = { Authorization: `Bearer ${apiKey}`, "Notion-Version": "2022-06-28", "Content-Type": "application/json" };
+  const request = async (path: string, method = "GET", body?: unknown) => {
+    const response = await fetch(`https://api.notion.com/v1/${path}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
+    if (!response.ok) throw new Error(`Awakening content persistence failed (${response.status})`);
+    return response.json();
+  };
+  const page = await request(`pages/${encodeURIComponent(pageId)}`);
+  const properties = page.properties ?? {};
+  if (page.archived || page.in_trash || normalizeKey(page.parent?.database_id || "") !== normalizeKey(databaseId) || !getRichTextProperty(properties, "wakeuphere_event_id")) {
+    throw new Error("Page is not an awakening in the WakeUp Map database");
+  }
+  const read = (aliases: string[]) => {
+    const keys = Object.keys(properties).filter(key => aliases.some(alias => normalizeKey(alias) === normalizeKey(key)));
+    return keys.map(key => getRichTextProperty(properties, key)).find(Boolean) || keys.map(key => getTitleProperty(properties, key)).find(Boolean) || "";
+  };
+  const readUrl = (aliases: string[]) => {
+    const key = Object.keys(properties).find(name => aliases.some(alias => normalizeKey(alias) === normalizeKey(name)) && properties[name]?.type === "url");
+    return key ? properties[key]?.url || "" : "";
+  };
+  const hasText = read(["greeting"]) && !/^AWAKE\s*\/\//.test(read(["greeting"])) && read(["story"]) && !read(["story"]).startsWith("WakeUpHere alarm acknowledged.");
+  const imageUrl = readUrl(["image url", "imageurl", "image"]);
+  if (hasText && imageUrl && read(["recipe"])) return { ok: true, complete: true, imageUrl };
+  const cachedJob = read(["wakeuphere_image_job"]);
+  if (hasText && cachedJob) {
+    const imageJob = JSON.parse(cachedJob);
+    if (imageJob.pageId !== pageId || !imageJob.awakeningRecord) throw new Error("Invalid stored awakening image job");
+    return { ok: true, imageJob };
+  }
+  const pressedAt = properties.wakeuphere_pressed_at?.date?.start;
+  if (!pressedAt || !Number.isFinite(Date.parse(pressedAt))) throw new Error("Awakening is missing its original button time");
+  const storedCity = read(["city"]), storedCountry = read(["country"]);
+  const canonical = loadWorldCities(pressedAt).find(city => normalizeKey(city.city) === normalizeKey(storedCity) && normalizeKey(city.country) === normalizeKey(storedCountry));
+  if (!canonical) throw new Error("The recorded awakening city is not in the city dataset");
+  const city = await localizeLocationNames({ ...canonical,
+    cityZh: read(["city zh", "cityZh", "city_zh"]) || canonical.cityZh,
+    countryZh: read(["country zh", "countryZh", "country_zh"]) || canonical.countryZh,
+  });
+  const database = await request(`databases/${databaseId}`);
+  const schema = database.properties ?? {};
+  const required: Array<[string,string,string[]]> = [
+    ["greeting","rich_text",["greeting"]], ["story","rich_text",["story"]], ["story_zh","rich_text",["story zh","storyZh","story_zh"]],
+    ["recipe","rich_text",["recipe"]], ["recipe_zh","rich_text",["recipe zh","recipeZh","recipe_zh"]], ["imageUrl","url",["image url","imageUrl","image"]],
+    ["wakeuphere_content_status","rich_text",["wakeuphere_content_status"]], ["wakeuphere_image_job","rich_text",["wakeuphere_image_job"]],
+  ];
+  const additions: Record<string,unknown> = {};
+  for (const [name,type,aliases] of required) if (!findPropertyName(schema,type,aliases)) {
+    if (schema[name]) throw new Error(`Incompatible awakening content field: ${name}`);
+    additions[name] = { [type]: {} };
+  }
+  if (Object.keys(additions).length) {
+    await request(`databases/${databaseId}`,"PATCH",{properties:additions});
+    for (const [name,definition] of Object.entries(additions)) schema[name] = {type:Object.keys(definition as object)[0]};
+  }
+  const userName = read(["wakeuphere_user_name","userName","user name","name"]);
+  const greeting = await generateGreeting(city);
+  if (!greeting.trim()) throw new Error("Local greeting generation returned no content");
+  const [story, breakfast] = await Promise.all([generateStory(city,greeting,userName),generateBreakfastConcept(city)]);
+  const imageJob = { pageId, awakeningRecord:true, city:storedCity, cityZh:city.cityZh, country:storedCountry, countryZh:city.countryZh,
+    recordedAtIso: new Date(pressedAt).toISOString(), breakfastName:breakfast.name, breakfastNameZh:breakfast.nameZh,
+    breakfastDescription:breakfast.description, breakfastDescriptionZh:breakfast.descriptionZh,
+    highlightIngredients:breakfast.highlightIngredients, breakfastCategory:breakfast.breakfastCategory,
+    sceneSetting:breakfast.sceneSetting, visualAnchors:breakfast.visualAnchors, avoidRepeats:breakfast.avoidRepeats };
+  const patch:Record<string,unknown> = {};
+  const set = (aliases:string[],value:string) => {
+    const name = findPropertyName(schema,"rich_text",aliases);
+    if (name) patch[name] = {rich_text:Array.from({length:Math.max(1,Math.ceil(value.length/1800))},(_,index)=>({text:{content:value.slice(index*1800,(index+1)*1800)}}))};
+  };
+  set(["greeting"],greeting);set(["story"],story.story);set(["story zh","storyZh","story_zh"],story.storyZh);
+  set(["city zh","cityZh","city_zh"],city.cityZh);set(["country zh","countryZh","country_zh"],city.countryZh);
+  set(["breakfast name"],breakfast.name);set(["breakfast name zh"],breakfast.nameZh);
+  set(["breakfast description"],breakfast.description);set(["breakfast description zh"],breakfast.descriptionZh);
+  set(["highlight ingredients"],breakfast.highlightIngredients.join(", "));set(["wakeuphere_content_status"],"text_ready");
+  set(["wakeuphere_image_job"],JSON.stringify(imageJob));
+  await request(`pages/${encodeURIComponent(pageId)}`,"PATCH",{properties:patch});
+  return {ok:true,imageJob};
+}
+
 export default async function handler(
   request: { method?: string; body?: WakeUpNowBody },
   response: {
@@ -1201,6 +1282,12 @@ export default async function handler(
 
     if (!notionApiKey || !databaseId) {
       return response.status(500).json({ error: "Missing NOTION_API_KEY or NOTION_DATABASE_ID" });
+    }
+
+    if (request.body?.action === "complete-awakening") {
+      response.setHeader?.("Cache-Control", "no-store");
+      if (!request.body.pageId || typeof request.body.pageId !== "string") return response.status(400).json({ error: "Missing awakening pageId" });
+      return response.status(200).json(await completeAwakeningContent(request.body.pageId, notionApiKey, databaseId));
     }
 
     const context = captureWakeUpContext(request.body ?? {});
