@@ -684,6 +684,33 @@
       setStoredUserName(getStoredUserName());
     }
 
+    let contentQueue = null;
+    const CONTENT_OUTBOX_KEY = "wakeuphere.contentOutbox";
+
+    function getContentQueue() {
+      if (!contentQueue) contentQueue = createWakeupHereContentQueue({
+        read: () => JSON.parse(localStorage.getItem(CONTENT_OUTBOX_KEY) || "[]"),
+        write: items => localStorage.setItem(CONTENT_OUTBOX_KEY, JSON.stringify(items)),
+        send: async ({ pageId }) => {
+          const post = async (url, payload) => {
+            const response = await fetch(url, {
+              method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload), signal: AbortSignal.timeout(70000),
+            });
+            const result = await response.json();
+            if (!response.ok || !result?.ok) throw new Error("Awakening content is awaiting retry");
+            return result;
+          };
+          const prepared = await post("/api/wake-up-now", { action: "complete-awakening", pageId });
+          if (prepared.complete) return;
+          if (!prepared.imageJob) throw new Error("Missing awakening breakfast job");
+          await post("/api/wake-up-image", prepared.imageJob);
+        },
+        onState: state => { if (state === "error") console.warn("Awakening content saved for automatic retry"); },
+      });
+      return contentQueue;
+    }
+
     let bookingQueue = null;
     const BOOKING_OUTBOX_KEY = "wakeuphere.bookingOutbox";
 
@@ -706,6 +733,11 @@
           });
           const result = await response.json();
           if (!response.ok || !result?.ok) throw new Error("Booking sync failed");
+          if (payload.wakeEvent && result.wakeRecordId) {
+            // Save the independent job before dropping the acknowledged event.
+            // Do not await generation: sound stop and booking writes stay fast.
+            void getContentQueue().enqueue({ pageId: result.wakeRecordId });
+          }
         },
       });
       return bookingQueue;
@@ -1832,7 +1864,7 @@
           const data = await response.json();
           return typeof data.version === "string" && /^[a-f0-9-]{36}$/.test(data.version) ? data.version : null;
         },
-        canUpdate: () => !isAlarmRinging && !isResetModalOpen,
+        canUpdate: () => !isAlarmRinging && !isResetModalOpen && !(contentQueue && contentQueue.isBusy()),
         onUpdate: (version) => {
           saveSelectionForUpdate();
           const url = new URL(window.location.href);
@@ -1849,6 +1881,10 @@
     window.addEventListener("DOMContentLoaded", () => {
       initMap();
       setStoredUserName(getStoredUserName());
+      // Resume content even if loading the map's city assets is temporarily unavailable.
+      getContentQueue().flush();
+      setInterval(() => getContentQueue().flush(), 15000);
+      window.addEventListener("online", () => getContentQueue().flush());
       loadDatabaseLocations().then(() => {
         if (!restoreSelectionAfterUpdate()) setStage(0);
         startDeploymentUpdateChecks();

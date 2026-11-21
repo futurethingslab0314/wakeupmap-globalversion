@@ -171,3 +171,51 @@ test('manual simulation acknowledgement does not create a formal awakening event
   assert(payloads.some(job=>job.action==='dismiss'));
   assert(payloads.every(job=>!job.wakeEvent));
 });
+
+test('real acknowledgement automatically starts durable content generation without delaying sound stop or booking writes',async()=>{
+ let releaseImage;const calls=[];const storage=new Map();
+ const p=await page(storage,Date.parse('2026-11-16T16:59:59Z'),{fetch:async(url,opts={})=>{
+   if(opts.method!=='POST')return {ok:true,json:async()=>({users:[]})};
+   const body=JSON.parse(opts.body);calls.push({url,body});
+   if(url==='/api/wake-up-now')return {ok:true,json:async()=>({ok:true,imageJob:{pageId:'wake-auto',awakeningRecord:true,city:'Muscat'}})};
+   if(url==='/api/wake-up-image'){await new Promise(resolve=>releaseImage=resolve);return {ok:true,json:async()=>({ok:true})};}
+   return {ok:true,json:async()=>({ok:true,...(body.wakeEvent?{wakeRecordId:'wake-auto'}:{})})};
+ }});
+ p.run('setStage(3)');await p.run('getBookingQueue().flush()');p.time('2026-11-16T17:00:00Z');p.run('pollDailyAlarm();handleAlarmStageSpaceKey()');
+ assert.equal(p.stops(),1);assert.equal(p.run('isAlarmRinging'),false);
+ assert.equal(await p.run('getBookingQueue().flush()'),true);await settle();
+ assert(calls.some(call=>call.url==='/api/wake-up-now'&&call.body.pageId==='wake-auto'));
+ assert(calls.some(call=>call.url==='/api/wake-up-image'&&call.body.city==='Muscat'));
+ assert.equal(JSON.parse(storage.get('wakeuphere.bookingOutbox')).length,0);
+ assert.equal(JSON.parse(storage.get('wakeuphere.contentOutbox'))[0].pageId,'wake-auto');
+ assert.equal(p.run('getContentQueue().isBusy()'),true);
+ p.run('syncWakeupHereIdentity({action:"cancel"})');await p.run('getBookingQueue().flush()');assert(calls.some(call=>call.body.action==='cancel'));
+ releaseImage();await p.run('getContentQueue().flush()');assert.equal(JSON.parse(storage.get('wakeuphere.contentOutbox')).length,0);
+});
+test('startup resumes a saved content job without opening the map or repeating the acknowledgement',async()=>{
+ const storage=new Map([['wakeuphere.contentOutbox',JSON.stringify([{pageId:'saved-wake'}])]]);const calls=[];
+ const p=await page(storage,Date.parse('2026-11-16T16:59:59Z'),{fetch:async(url,opts={})=>{
+  if(opts.method==='POST')calls.push({url,body:JSON.parse(opts.body)});
+  return {ok:true,json:async()=>({ok:true,complete:true,users:[]})};
+ }});
+ p.run('initMap=()=>{}');p.handlers.get('DOMContentLoaded').at(-1)();await settle();await p.run('getContentQueue().flush()');
+ assert(calls.some(call=>call.url==='/api/wake-up-now'&&call.body.pageId==='saved-wake'));
+ assert(calls.every(call=>!call.body.wakeEvent));assert.equal(JSON.parse(storage.get('wakeuphere.contentOutbox')).length,0);
+});
+
+test('manual simulation never enqueues content even if a response accidentally includes a record ID',async()=>{
+ const calls=[];const p=await page(new Map(),Date.parse('2026-11-16T16:59:59Z'),{fetch:async(url,opts={})=>{
+  if(opts.method==='POST')calls.push(String(url));
+  return {ok:true,json:async()=>({ok:true,wakeRecordId:'not-a-real-event',users:[]})};
+ }});
+ p.run('setStage(3);triggerAlarmSimulation();handleAlarmStageSpaceKey()');await p.run('getBookingQueue().flush()');await settle();
+ assert(calls.every(url=>url!=='/api/wake-up-now'&&url!=='/api/wake-up-image'));
+});
+test('browser deployment reload is deferred while content generation is in flight',async()=>{
+ let release;const p=await page();
+ p.run('contentQueue = createWakeupHereContentQueue({read:()=>[],write:()=>{},send:()=>new Promise(resolve=>{globalThis.releaseContent=resolve;})});contentQueue.enqueue({pageId:"work"});');
+ p.ctx.document.querySelector=()=>({content:'12345678-1234-1234-1234-123456789abc'});
+ p.ctx.createWakeupHereUpdateChecker=options=>{p.ctx.updateOptions=options;return()=>{};};
+ p.run('startDeploymentUpdateChecks()');assert.equal(p.ctx.updateOptions.canUpdate(),false);
+ p.run('releaseContent()');await p.run('getContentQueue().flush()');assert.equal(p.ctx.updateOptions.canUpdate(),true);
+});

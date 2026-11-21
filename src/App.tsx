@@ -49,6 +49,7 @@ export default function App() {
   const latestReservationRequest = useRef(0);
   const [awakeningContentError, setAwakeningContentError] = useState(false);
   const [awakeningRetry, setAwakeningRetry] = useState(0);
+  const lastAwakeningRetry = useRef(0);
   const [layerFilter, setLayerFilter] = useState<MapLayerFilter>("all");
   const [records, setRecords] = useState<NotionRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<NotionRecord | null>(null);
@@ -259,13 +260,19 @@ export default function App() {
     }
     let active = true;
     setAwakeningContentError(false);
-    void ensureAwakeningContent(selectedRecord.id, {
-      onTextReady: () => fetchData({ showLoading: false }),
-    }).then(() => fetchData({ showLoading: false })).catch(error => {
-      console.error("Awakening content generation failed:", error);
-      if (active) setAwakeningContentError(true);
-    });
-    return () => { active = false; };
+    // WakeUpHere starts the immediate job. Allow both bounded API stages to
+    // finish before map-side recovery; an explicit retry still starts now.
+    const manualRetry = awakeningRetry !== lastAwakeningRetry.current;
+    lastAwakeningRetry.current = awakeningRetry;
+    const timer = window.setTimeout(() => {
+      void ensureAwakeningContent(selectedRecord.id, {
+        onTextReady: () => fetchData({ showLoading: false }),
+      }).then(() => fetchData({ showLoading: false })).catch(error => {
+        console.error("Awakening content generation failed:", error);
+        if (active) setAwakeningContentError(true);
+      });
+    }, manualRetry ? 0 : 180000);
+    return () => { active = false; window.clearTimeout(timer); };
   }, [selectedRecord?.id, selectedRecord?.wakeEventId, selectedRecord?.mapPointKind, selectedRecord?.imageUrl, selectedRecord?.recipe, selectedRecord?.recipe_zh, language, awakeningRetry, fetchData]);
 
   const checkBreakfastReadiness = useCallback(async (targetRecord?: NotionRecord | null) => {
@@ -281,8 +288,13 @@ export default function App() {
         return null;
       }
 
-      setPendingBreakfastRecords(nextRecords);
-      setReadyBreakfastRecordId(completedRecord.id);
+      if (recordToCheck.wakeEventId) {
+        // The Pi can finish this job while the map is already open.
+        setRecords(nextRecords);
+      } else {
+        setPendingBreakfastRecords(nextRecords);
+        setReadyBreakfastRecordId(completedRecord.id);
+      }
       return completedRecord;
     } catch (err) {
       console.error("Breakfast readiness check failed:", err);

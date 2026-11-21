@@ -33,3 +33,7 @@
 請使用完整的 `npm run build`，不要只執行 `vite build`。
 測試：`npm run test:wakeuphere-update`。
 只在需要的版本資訊請求上停用快取，不變更 OpenStreetMap 圖磚快取。
+
+## 醒來內容生成中的更新
+
+WakeUpHere 在地方介紹或早餐圖片工作執行期間暫緩自動重新載入。工作完成或本次請求失敗後可更新；未完成的內容頁面 ID 已保存，更新或重新開機後會接續重試。
