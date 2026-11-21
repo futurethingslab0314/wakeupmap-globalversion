@@ -36,3 +36,7 @@ WakeUp Map 在視窗重新取得焦點時及每 60 秒更新紀錄。Ctrl+H 模�
 新舊實際甦醒紀錄都可在點開後補齊內容。文字準備好會先顯示，再準備早餐圖片。準備中的圖片沿用原本的早餐佔位狀態；失敗會顯示「重新準備內容」按鈕。重新開啟紀錄會接續 Notion 上已保存的圖片工作，已完成內容不重複生成。
 
 `POST /api/wake-up-now` 的 `action: complete-awakening` 只更新指定主資料庫內的既有醒來紀錄；`/api/wake-up-image` 對這類紀錄使用其已保存的城市與早餐工作，不接受客戶端換城市。增加的 `wakeuphere_content_status` 與 `wakeuphere_image_job` 欄位只記錄內容準備狀態。
+
+## 圖片模型
+
+正式環境驗證發現舊 `gpt-image-1` 已停用（[官方停用資訊](https://developers.openai.com/api/docs/guides/tools-image-generation)）。圖片生成預設改用 `gpt-image-2.5-flare`，可透過 `OPENAI_IMAGE_MODEL` 指定仍受支援的模型。正式 API 和本機服務使用相同預設；已儲存的早餐圖片與原始醒來紀錄不受影響。

@@ -280,7 +280,7 @@ async function callOpenAIImage(prompt: string): Promise<Uint8Array> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-image-1",
+      model: process.env.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-2.5-flare",
       prompt,
       size: "1024x1024",
     }),

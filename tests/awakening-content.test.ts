@@ -59,6 +59,7 @@ test('image failure can resume the cached job; completed image is reused without
  s.failImage=false;const count=s.ai.length;
  const retry=await call({action:'complete-awakening',pageId:'awake-1'});assert.equal(s.ai.length,count);
  const image=await call(retry.data.imageJob,imageHandler as any);assert.equal(image.code,200,JSON.stringify(image.data));
+ assert(s.ai.filter((call:any)=>call.prompt).every((call:any)=>call.model==='gpt-image-2.5-flare'));
  assert.match(s.page.properties.imageUrl.url,/images.fixture.invalid/);assert.match(s.page.properties.recipe.rich_text[0].plain_text,/Bread/);
  const completed=await call({action:'complete-awakening',pageId:'awake-1'});assert.equal(completed.data.complete,true);
  const after=s.ai.length;assert.equal((await call(retry.data.imageJob,imageHandler as any)).code,200);assert.equal(s.ai.length,after);assert.equal(s.created,0);

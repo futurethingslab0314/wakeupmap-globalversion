@@ -38,7 +38,7 @@ function extractTextOutput(data: ResponsesApiPayload): string {
 
 export function createOpenAIClient(options: CreateOpenAIClientOptions): OpenAIClient {
   const textModel = options.textModel ?? "gpt-4.1-mini";
-  const imageModel = options.imageModel ?? "gpt-image-1";
+  const imageModel = options.imageModel ?? (process.env.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-2.5-flare");
 
   return {
     async generateText(request: OpenAITextRequest): Promise<string> {
