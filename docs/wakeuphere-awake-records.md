@@ -42,3 +42,13 @@ WakeUp Map 開啟黑點時會先等背景工作，準備好後自動更新；停
 ## 圖片模型
 
 正式環境驗證發現舊 `gpt-image-1` 已停用（[官方停用資訊](https://developers.openai.com/api/docs/guides/tools-image-generation)）。圖片生成預設改用 `gpt-image-2.5-flare`，可透過 `OPENAI_IMAGE_MODEL` 指定仍受支援的模型。正式 API 和本機服務使用相同預設；已儲存的早餐圖片與原始醒來紀錄不受影響。
+
+## 早餐圖片每筆只生成一次
+
+同一筆 Notion 甦醒紀錄的圖片會儲存在 Cloudflare R2，Notion 保存其網址。一般 Wake Up Now 與 WakeUpHere 使用同一個圖片 API。只要已有圖片網址，就沿用原圖；食譜缺漏可補文字，不重生圖片。不同日期／不同紀錄仍各自擁有自己的圖片。
+
+新圖片使用以紀錄 ID 衍生的固定物件路徑，避免同城市同時間的不同帳號互相覆寫。R2 工作收據與條件式寫入防止兩個伺服器同時產圖；PNG 存好後才寫回 Notion。Notion 寫回失敗時，重試從 R2 修復，不重新呼叫圖片模型。既有舊路徑圖片維持原網址，不強制搬移或重生。
+
+圖片生成請求結果不明（例如送出後網路中斷）時，系統保留已送出的標記，不自動要求第二張。若原圖尚未成功存入 R2，需先查明原次結果再人工處理；不能為了補圖而默默再次生成。確認未成功的 API 錯誤才允許重新嘗試。請勿手動刪除已保存的原圖或工作收據。
+
+R2 的條件式寫入保證由 [Cloudflare 官方文件](https://developers.cloudflare.com/r2/reference/consistency/) 說明。

@@ -7,14 +7,14 @@ const eventPage=()=>({id:'awake-1',parent:{database_id:'map-db'},properties:{use
 async function fixture(fn:(s:any,call:(body:any,which?:typeof handler)=>Promise<any>)=>Promise<void>){
  const previousFetch=globalThis.fetch,env={...process.env};
  Object.assign(process.env,{NOTION_API_KEY:'fixture',NOTION_DATABASE_ID:'map-db',OPENAI_API_KEY:'fixture',CLOUDFLARE_R2_ENDPOINT:'https://r2.fixture.invalid',CLOUDFLARE_R2_ACCESS_KEY_ID:'fixture',CLOUDFLARE_R2_SECRET_ACCESS_KEY:'fixture',CLOUDFLARE_R2_BUCKET:'images',CLOUDFLARE_R2_PUBLIC_URL:'https://images.fixture.invalid'});
- const state={page:eventPage() as any,ai:[] as any[],patches:[] as any[],created:0,failImage:false};
+ const state={page:eventPage() as any,ai:[] as any[],patches:[] as any[],created:0,failImage:false,objects:new Map<string,any>()};let etag=0;
  const concept={name:'Omani breakfast',nameZh:'阿曼早餐',description:'A local morning meal',descriptionZh:'在地早餐',highlightIngredients:['bread'],breakfastCategory:'bread',sceneSetting:'home table',visualAnchors:['cup'],avoidRepeats:[]};
  globalThis.fetch=(async(url,options:any={})=>{
   const path=String(url),method=options.method||'GET';
   if(path.endsWith('/pages/awake-1')&&method==='GET')return Response.json(state.page);
   if(path.endsWith('/databases/map-db')&&method==='GET')return Response.json({properties:state.page.properties});
   if(path.endsWith('/databases/map-db')&&method==='PATCH'){
-   const body=JSON.parse(options.body);for(const [key,value]of Object.entries(body.properties) as any)state.page.properties[key]={type:Object.keys(value)[0],[Object.keys(value)[0]]:[]};
+   const body=JSON.parse(options.body);for(const [key,value]of Object.entries(body.properties) as any)state.page.properties[key]={type:Object.keys(value)[0],[Object.keys(value)[0]]:Object.keys(value)[0]==='url'?null:[]};
    return Response.json({properties:state.page.properties});
   }
   if(path.endsWith('/pages/awake-1')&&method==='PATCH'){
@@ -34,10 +34,17 @@ async function fixture(fn:(s:any,call:(body:any,which?:typeof handler)=>Promise<
    return Response.json({output_text:typeof value==='string'?value:JSON.stringify(value)});
   }
   if(path==='https://api.openai.com/v1/images/generations'){
-   state.ai.push(JSON.parse(options.body));if(state.failImage)return Response.json({error:'fixture failure'},{status:503});
+   state.ai.push(JSON.parse(options.body));if(state.failImage)return Response.json({error:'fixture failure'},{status:400});
    return Response.json({data:[{b64_json:Buffer.from('fixture png').toString('base64')}]});
   }
-  if(path.startsWith('https://r2.fixture.invalid/')&&method==='PUT')return new Response('',{status:200});
+  if(path.startsWith('https://r2.fixture.invalid/')){
+   const stored=state.objects.get(path),headers=new Headers(options.headers);
+   if(method==='GET'||method==='HEAD')return stored?new Response(method==='HEAD'?null:stored.bytes,{headers:{ETag:stored.etag}}):new Response(null,{status:404});
+   if(method==='PUT'){
+    if((headers.get('if-none-match')==='*'&&stored)||(headers.get('if-match')&&headers.get('if-match')!==stored?.etag))return new Response(null,{status:412});
+    const value={bytes:Buffer.from(options.body),etag:'"e'+(++etag)+'"'};state.objects.set(path,value);return new Response(null,{headers:{ETag:value.etag}});
+   }
+  }
   throw Error('Unexpected request '+method+' '+path);
  }) as typeof fetch;
  const call=async(body:any,which=handler)=>{const response={code:200,data:null as any,status(code:number){this.code=code;return this},json(data:any){this.data=data;return this},setHeader(){}};await which({method:'POST',body},response);return response;};

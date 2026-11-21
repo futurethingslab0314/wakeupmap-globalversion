@@ -1,4 +1,4 @@
-import { createHash, createHmac } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 
 type WakeUpImageBody = {
   awakeningRecord?: boolean;
@@ -288,7 +288,7 @@ async function callOpenAIImage(prompt: string): Promise<Uint8Array> {
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`OpenAI image request failed: ${response.status} ${errorText}`);
+    throw Object.assign(new Error(`OpenAI image request failed: ${response.status} ${errorText}`), { confirmedNoImage: [400, 401, 403, 404, 422, 429].includes(response.status) });
   }
 
   const data = (await response.json()) as { data?: Array<{ b64_json?: string }> };
@@ -375,6 +375,7 @@ function signR2Request(options: {
   secretAccessKey: string;
   body: Uint8Array;
   contentType: string;
+  extraHeaders?: Record<string, string>;
   now?: Date;
 }) {
   const now = options.now ?? new Date();
@@ -382,12 +383,14 @@ function signR2Request(options: {
   const dateStamp = amzDate.slice(0, 8);
   const payloadHash = hashSha256(options.body);
   const host = options.url.host;
-  const canonicalHeaders =
-    `content-type:${options.contentType}\n` +
-    `host:${host}\n` +
-    `x-amz-content-sha256:${payloadHash}\n` +
-    `x-amz-date:${amzDate}\n`;
-  const signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date";
+  const headers: Record<string,string> = {
+    "content-type":options.contentType, host,
+    "x-amz-content-sha256":payloadHash, "x-amz-date":amzDate,
+    ...options.extraHeaders,
+  };
+  const names=Object.keys(headers).sort();
+  const canonicalHeaders=names.map(name=>`${name}:${headers[name].trim()}\n`).join("");
+  const signedHeaders=names.join(";");
   const canonicalRequest = [
     options.method,
     options.url.pathname,
@@ -413,50 +416,6 @@ function signR2Request(options: {
     `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
   return { authorization, amzDate, payloadHash };
-}
-
-async function uploadToR2(cityName: string, recordedAtIso: string, imageBinary: Uint8Array) {
-  const endpoint = process.env.CLOUDFLARE_R2_ENDPOINT;
-  const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
-  const bucket = process.env.CLOUDFLARE_R2_BUCKET;
-  const publicUrlBase = process.env.CLOUDFLARE_R2_PUBLIC_URL;
-
-  if (!endpoint || !accessKeyId || !secretAccessKey || !bucket || !publicUrlBase) {
-    throw new Error("Missing Cloudflare R2 configuration");
-  }
-
-  const key = `wake-up-now/${slugify(cityName)}/${recordedAtIso.toLowerCase().replace(/[:.]/g, "-")}.png`;
-  const url = new URL(`${endpoint.replace(/\/$/, "")}/${bucket}/${encodeR2Key(key)}`);
-  const signature = signR2Request({
-    method: "PUT",
-    url,
-    accessKeyId,
-    secretAccessKey,
-    body: imageBinary,
-    contentType: "image/png",
-  });
-
-  const response = await fetch(url, {
-    method: "PUT",
-    headers: {
-      Authorization: signature.authorization,
-      "Content-Type": "image/png",
-      "x-amz-content-sha256": signature.payloadHash,
-      "x-amz-date": signature.amzDate,
-    },
-    body: Buffer.from(imageBinary),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`R2 upload failed: ${response.status} ${errorText}`);
-  }
-
-  return {
-    imageStorageKey: key,
-    imageUrl: buildR2PublicUrl(publicUrlBase, key),
-  };
 }
 
 async function updateNotionBreakfastProperties(
@@ -500,9 +459,8 @@ async function updateNotionBreakfastProperties(
   }
 
   const imageUrlName = findPropertyName(properties, "url", ["image url", "imageurl", "image"]);
-  if (imageUrlName) {
-    patchProperties[imageUrlName] = { url: payload.imageUrl };
-  }
+  const existingUrl = imageUrlName ? (properties[imageUrlName] as {url?:string}).url : "";
+  if (imageUrlName) patchProperties[imageUrlName] = {url:existingUrl || payload.imageUrl};
 
   const imagePromptName = findPropertyName(properties, "rich_text", ["image prompt"]);
   if (imagePromptName) {
@@ -511,10 +469,10 @@ async function updateNotionBreakfastProperties(
     };
   }
 
-  const imageStorageKeyName = findPropertyName(properties, "url", ["imagestoragekey", "image storage key"]);
-  if (imageStorageKeyName) {
-    patchProperties[imageStorageKeyName] = { url: payload.imageStorageKey };
-  }
+  const imageStorageKeyText = findPropertyName(properties, "rich_text", ["imagestoragekey", "image storage key"]);
+  const imageStorageKeyUrl = findPropertyName(properties, "url", ["imagestoragekey", "image storage key"]);
+  if (imageStorageKeyText && payload.imageStorageKey) patchProperties[imageStorageKeyText] = {rich_text:[{text:{content:payload.imageStorageKey}}]};
+  else if (imageStorageKeyUrl && payload.imageStorageKey) patchProperties[imageStorageKeyUrl] = {url:payload.imageUrl};
 
   if (properties.wakeuphere_content_status?.type === "rich_text") {
     patchProperties.wakeuphere_content_status = {rich_text:[{text:{content:"complete"}}]};
@@ -534,6 +492,79 @@ async function updateNotionBreakfastProperties(
     const errorText = await updateResponse.text();
     throw new Error(`Notion page update failed: ${updateResponse.status} ${errorText}`);
   }
+  return existingUrl || payload.imageUrl;
+}
+
+type StoredBreakfast = {recipe:string;recipeZh:string;imagePrompt:string;imageUrl:string;imageStorageKey:string};
+type ImageReceipt = {version:1;pageId:string;owner:string;phase:'preparing'|'image_requested'|'stored'|'failed';updatedAt:number;breakfast?:StoredBreakfast};
+
+// The receipt is shared by all serverless instances. Never expire an
+// image_requested receipt: a lost provider response must not charge for a retry.
+function breakfastStore(pageId:string) {
+  const endpoint=process.env.CLOUDFLARE_R2_ENDPOINT, bucket=process.env.CLOUDFLARE_R2_BUCKET;
+  const accessKeyId=process.env.CLOUDFLARE_R2_ACCESS_KEY_ID, secretAccessKey=process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
+  const publicBase=process.env.CLOUDFLARE_R2_PUBLIC_URL;
+  if(!endpoint||!bucket||!accessKeyId||!secretAccessKey||!publicBase)throw Error('Missing Cloudflare R2 configuration');
+  const normalized=pageId.trim().toLowerCase().replace(/-/g,'');
+  const prefix=`breakfast-records/v1/${createHash('sha256').update(normalized).digest('hex')}`;
+  const imageStorageKey=prefix+'/image.png',receiptKey=prefix+'/job.json';
+  const imageUrl=buildR2PublicUrl(publicBase,imageStorageKey);
+  const request=async(method:string,key:string,body=new Uint8Array(),type='application/json',conditions:Record<string,string>={})=>{
+    const url=new URL(`${endpoint.replace(/\/$/,'')}/${bucket}/${encodeR2Key(key)}`);
+    const signature=signR2Request({method,url,accessKeyId,secretAccessKey,body,contentType:type,extraHeaders:conditions});
+    return fetch(url,{method,headers:{'Content-Type':type,Authorization:signature.authorization,'x-amz-content-sha256':signature.payloadHash,'x-amz-date':signature.amzDate,...conditions},...(method==='PUT'?{body:Buffer.from(body)}:{})});
+  };
+  const read=async():Promise<{job:ImageReceipt;etag:string}|null>=>{
+    const response=await request('GET',receiptKey);
+    if(response.status===404)return null;
+    if(!response.ok)throw Error(`Image receipt read failed (${response.status})`);
+    const job=await response.json() as ImageReceipt,etag=response.headers.get('etag');
+    if(job.version!==1||job.pageId!==pageId||!etag)throw Error('Invalid image receipt; regeneration disabled');
+    return {job,etag};
+  };
+  const write=async(job:ImageReceipt,etag?:string)=>{
+    let response:Response;
+    try{
+      for(let attempt=0;attempt<3;attempt++){
+        response=await request('PUT',receiptKey,Buffer.from(JSON.stringify(job)),'application/json',etag?{'if-match':etag}:{'if-none-match':'*'});
+        if(response.status!==429||attempt===2)break;
+        await new Promise(resolve=>setTimeout(resolve,1100));
+      }
+    }
+    catch(error){const saved=await read();if(saved?.job.owner===job.owner&&saved.job.phase===job.phase)return saved;throw error;}
+    if(response.status===412)return null;
+    if(!response.ok)throw Error(`Image receipt write failed (${response.status})`);
+    const next=response.headers.get('etag');
+    if(next)return {job,etag:next};
+    const saved=await read();return saved?.job.owner===job.owner&&saved.job.phase===job.phase?saved:null;
+  };
+  const hasImage=async()=>{
+    const response=await request('HEAD',imageStorageKey,new Uint8Array(),'image/png');
+    if(response.status===404)return false;
+    if(!response.ok)throw Error(`Stored image check failed (${response.status})`);
+    return true;
+  };
+  const saveImage=async(bytes:Uint8Array)=>{
+    let error:unknown;
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        const response=await request('PUT',imageStorageKey,bytes,'image/png',{'if-none-match':'*'});
+        if(response.ok||response.status===412)return;
+        if(response.status===429&&attempt<2)await new Promise(resolve=>setTimeout(resolve,1100));
+        throw Error(`Image storage failed (${response.status})`);
+      }catch(failure){error=failure;}
+    }
+    throw error;
+  };
+  return {read,write,hasImage,saveImage,imageUrl,imageStorageKey};
+}
+
+async function prepareImageRecipe(body:WakeUpImageBody){
+  const city={city:body.city!,cityZh:body.cityZh||body.city!,country:body.country!,countryZh:body.countryZh||body.country!};
+  const concept=body.breakfastName&&body.breakfastNameZh&&body.breakfastDescription&&body.breakfastDescriptionZh
+    ?{name:body.breakfastName,nameZh:body.breakfastNameZh,description:body.breakfastDescription,descriptionZh:body.breakfastDescriptionZh,highlightIngredients:body.highlightIngredients??[],breakfastCategory:body.breakfastCategory??'',sceneSetting:body.sceneSetting??'',visualAnchors:body.visualAnchors??[],avoidRepeats:body.avoidRepeats??[]}
+    :await generateBreakfastConcept(city);
+  return generateRecipe(city,concept);
 }
 
 export default async function handler(
@@ -544,82 +575,76 @@ export default async function handler(
     setHeader?(name: string, value: string | string[]): unknown;
   },
 ) {
+  response.setHeader?.("Cache-Control", "no-store");
   try {
-    if (request.method !== "POST") {
-      response.setHeader?.("Allow", "POST");
-      return response.status(405).json({ error: "Method Not Allowed" });
+    if(request.method!=="POST") { response.setHeader?.("Allow","POST"); return response.status(405).json({error:"Method Not Allowed"}); }
+    let body=request.body??{};
+    if(!body.pageId)return response.status(400).json({error:"Missing wake-up image pageId"});
+    const apiKey=process.env.NOTION_API_KEY,databaseId=process.env.NOTION_DATABASE_ID;
+    if(!apiKey||!databaseId)throw Error("Missing NOTION_API_KEY or NOTION_DATABASE_ID");
+    const pageResponse=await fetch(`https://api.notion.com/v1/pages/${encodeURIComponent(body.pageId)}`,{headers:{Authorization:`Bearer ${apiKey}`,"Notion-Version":"2022-06-28"}});
+    if(!pageResponse.ok)throw Error(`Image page fetch failed (${pageResponse.status})`);
+    const page=await pageResponse.json(),p=page.properties??{};
+    const normalize=(value:string)=>value.trim().toLowerCase().replace(/[\s_-]+/g,"");
+    const read=(aliases:string[])=>{
+      const names=Object.keys(p).filter(name=>aliases.some(alias=>normalize(alias)===normalize(name)));
+      return names.map(name=>p[name]?.rich_text?.map((part:any)=>part.plain_text??part.text?.content??"").join("")).find(Boolean)||"";
+    };
+    if(page.archived||page.in_trash||normalize(page.parent?.database_id||"")!==normalize(databaseId))throw Error("Image record is not in the WakeUp Map database");
+    const imageName=Object.keys(p).find(name=>["imageurl","image"].includes(normalize(name))&&p[name]?.type==="url");
+    const existingImage=imageName?p[imageName].url:"";
+    const isAwakening=Boolean(read(["wakeuphere_event_id"]));
+    // A saved image always wins, even if the caller changed its city/time,
+    // or its recipe is incomplete. Repair text separately, never the picture.
+    if(existingImage&&read(["recipe"]))return response.status(200).json({ok:true,imageUrl:existingImage,existing:true});
+    if(body.awakeningRecord&&!isAwakening)throw Error("Page is not an awakening in the WakeUp Map database");
+    if(isAwakening){
+      const stored=read(["wakeuphere_image_job"]);
+      if(stored){const job=JSON.parse(stored);if(!job.awakeningRecord||job.pageId!==body.pageId)throw Error("Invalid stored breakfast job");body=job;}
+      else if(!existingImage)throw Error("Prepare awakening content before its image");
     }
-
-    let body = request.body ?? {};
-    if (body.awakeningRecord) {
-      response.setHeader?.("Cache-Control", "no-store");
-      if (!body.pageId) return response.status(400).json({ error: "Missing awakening pageId" });
-      const pageResponse = await fetch(`https://api.notion.com/v1/pages/${encodeURIComponent(body.pageId)}`, {
-        headers: { Authorization: `Bearer ${process.env.NOTION_API_KEY}`, "Notion-Version": "2022-06-28" },
-      });
-      if (!pageResponse.ok) throw new Error(`Awakening image page fetch failed (${pageResponse.status})`);
-      const page = await pageResponse.json();
-      const p = page.properties ?? {};
-      const normalize = (s:string) => s.trim().toLowerCase().replace(/[\s_-]+/g, "");
-      const read = (aliases:string[]) => {
-        const key = Object.keys(p).find(name => aliases.some(alias => normalize(alias) === normalize(name)) && p[name]?.rich_text);
-        return key ? p[key].rich_text.map((part:any) => part.plain_text ?? part.text?.content ?? "").join("") : "";
+    if(existingImage){
+      if(body.city&&body.country){
+        const recipe=await prepareImageRecipe(body);
+        await updateNotionBreakfastProperties(body.pageId!,{recipe:recipe.recipe,recipeZh:recipe.recipeZh,imagePrompt:read(["image prompt"]),imageUrl:existingImage,imageStorageKey:""});
+      }
+      return response.status(200).json({ok:true,imageUrl:existingImage,existing:true});
+    }
+    if(!body.city||!body.country||!body.recordedAtIso)return response.status(400).json({error:"Missing required wake-up image payload"});
+    if(!imageName)throw Error("The record needs an Image URL field before image generation");
+    const id=page.id||body.pageId;
+    const store=breakfastStore(id),previous=await store.read();
+    if(await store.hasImage()){
+      const saved=previous?.job.breakfast || {
+        recipe:read(["recipe"]),recipeZh:read(["recipe zh","recipeZh","recipe_zh"]),imagePrompt:read(["image prompt"]),
+        imageUrl:store.imageUrl,imageStorageKey:store.imageStorageKey,
       };
-      if (page.archived || page.in_trash || !process.env.NOTION_DATABASE_ID || normalize(page.parent?.database_id || "") !== normalize(process.env.NOTION_DATABASE_ID) || !read(["wakeuphere_event_id"])) throw new Error("Page is not an awakening in the WakeUp Map database");
-      const imageName = Object.keys(p).find(name => ["imageurl","image"].includes(normalize(name)) && p[name]?.url);
-      if (imageName && read(["recipe"])) return response.status(200).json({ ok:true, imageUrl:p[imageName].url, existing:true });
-      const storedJob = JSON.parse(read(["wakeuphere_image_job"]) || "null");
-      if (!storedJob?.awakeningRecord || storedJob.pageId !== body.pageId) throw new Error("Prepare the awakening content before its image");
-      body = storedJob;
+      const imageUrl=await updateNotionBreakfastProperties(id,saved);
+      return response.status(200).json({ok:true,imageUrl,existing:true});
     }
-    if (!body.pageId || !body.city || !body.country || !body.recordedAtIso) {
-      return response.status(400).json({ error: "Missing required wake-up image payload" });
+    const pending=()=>response.status(409).json({ok:false,pending:true,error:"Image generation already started; waiting for its stored result. A second image will not be requested."});
+    if(previous&&!(previous.job.phase==="failed"||(previous.job.phase==="preparing"&&Date.now()-previous.job.updatedAt>300000)))return pending();
+    let receipt=await store.write({version:1,pageId:id,owner:randomUUID(),phase:"preparing",updatedAt:Date.now()},previous?.etag);
+    if(!receipt)return pending();
+    let imageStarted=false;
+    try{
+      const recipe=await prepareImageRecipe(body);
+      const breakfast:StoredBreakfast={recipe:recipe.recipe,recipeZh:recipe.recipeZh,imagePrompt:buildImagePrompt(body.city,body.country,recipe),imageUrl:store.imageUrl,imageStorageKey:store.imageStorageKey};
+      const requested=await store.write({...receipt.job,phase:"image_requested",breakfast,updatedAt:Date.now()},receipt.etag);
+      if(!requested)return pending();
+      receipt=requested;imageStarted=true;
+      const bytes=await callOpenAIImage(breakfast.imagePrompt);
+      await store.saveImage(bytes);
+      // If this receipt update fails, HEAD + the image_requested receipt can
+      // still recover the saved bytes. Never call the image model again.
+      await store.write({...receipt.job,phase:"stored",updatedAt:Date.now()},receipt.etag);
+      const imageUrl=await updateNotionBreakfastProperties(id,breakfast);
+      return response.status(200).json({ok:true,imageUrl});
+    }catch(error){
+      if(!imageStarted||(error as {confirmedNoImage?:boolean})?.confirmedNoImage){
+        try{await store.write({...receipt.job,phase:"failed",updatedAt:Date.now()},receipt.etag);}catch{}
+      }
+      throw error;
     }
-
-    const localizedCity = body.cityZh || body.city;
-    const localizedCountry = body.countryZh || body.country;
-    const breakfastConcept =
-      body.breakfastName && body.breakfastNameZh && body.breakfastDescription && body.breakfastDescriptionZh
-        ? {
-            name: body.breakfastName,
-            nameZh: body.breakfastNameZh,
-            description: body.breakfastDescription,
-            descriptionZh: body.breakfastDescriptionZh,
-            highlightIngredients: body.highlightIngredients ?? [],
-            breakfastCategory: body.breakfastCategory ?? "",
-            sceneSetting: body.sceneSetting ?? "",
-            visualAnchors: body.visualAnchors ?? [],
-            avoidRepeats: body.avoidRepeats ?? [],
-          }
-        : await generateBreakfastConcept({
-            city: body.city,
-            cityZh: localizedCity,
-            country: body.country,
-            countryZh: localizedCountry,
-          });
-    const recipe = await generateRecipe(
-      {
-        city: body.city,
-        cityZh: localizedCity,
-        country: body.country,
-        countryZh: localizedCountry,
-      },
-      breakfastConcept,
-    );
-    const imagePrompt = buildImagePrompt(body.city, body.country, recipe);
-    const imageBinary = await callOpenAIImage(imagePrompt);
-    const uploadedImage = await uploadToR2(body.city, body.recordedAtIso, imageBinary);
-    await updateNotionBreakfastProperties(body.pageId, {
-      recipe: recipe.recipe,
-      recipeZh: recipe.recipeZh,
-      imagePrompt,
-      imageUrl: uploadedImage.imageUrl,
-      imageStorageKey: uploadedImage.imageStorageKey,
-    });
-
-    return response.status(200).json({ ok: true, imageUrl: uploadedImage.imageUrl });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return response.status(500).json({ error: message });
-  }
+  }catch(error){return response.status(500).json({error:error instanceof Error?error.message:"Unknown image error"});}
 }
