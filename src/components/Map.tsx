@@ -22,11 +22,17 @@ import { motion } from "motion/react";
 import { geoOrthographic } from "d3-geo";
 import { soundService } from "../services/soundService";
 
+import ReservationMapLayer from "./ReservationMapLayer";
+import type { WakeMapFilter } from "../reservationMap";
+
 const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
 interface MapProps {
   records: NotionRecord[];
   language: UiLanguage;
+  reservationTargets?: NotionRecord[];
+  comparisonPairs?: Array<{target: NotionRecord; actual: NotionRecord; distanceKm: number}>;
+  layerFilter?: WakeMapFilter;
   rotation: [number, number, number];
   onRotationChange: (rotation: [number, number, number]) => void;
   onSelectRecord: (record: NotionRecord) => void;
@@ -39,8 +45,9 @@ interface MapProps {
 }
 
 const Map: React.FC<MapProps> = ({ 
-  records, 
+  records: actualRecords,
   language,
+  reservationTargets = [], comparisonPairs = [], layerFilter = "all",
   rotation,
   onRotationChange,
   onSelectRecord, 
@@ -50,7 +57,10 @@ const Map: React.FC<MapProps> = ({
   isWakeupMode = false,
   todayRecords = [],
   onSelectGroup,
-}) => {
+}: MapProps) => {
+  const records = useMemo(() => layerFilter === "reservations" ? [] : actualRecords, [actualRecords, layerFilter]);
+  const visibleTargets = useMemo(() => layerFilter === "actual" ? [] : reservationTargets, [reservationTargets, layerFilter]);
+  const focusRecords = useMemo(() => [...records, ...visibleTargets], [records, visibleTargets]);
   const [isDragging, setIsDragging] = useState(false);
   const [lastMousePos, setLastMousePos] = useState<{ x: number; y: number } | null>(null);
   const [lastTouchPos, setLastTouchPos] = useState<{ x: number; y: number } | null>(null);
@@ -61,20 +71,20 @@ const Map: React.FC<MapProps> = ({
 
   // Center on the selected record, or the most recent record by recordedAtDate.
   const focusedRecordId = React.useMemo(() => {
-    const latestRecord = getLatestRecord(records);
+    const latestRecord = getLatestRecord(focusRecords);
     return selectedId || latestRecord?.id || (highlightedIds.length > 0 ? highlightedIds[0] : undefined);
-  }, [selectedId, records, highlightedIds]);
+  }, [selectedId, focusRecords, highlightedIds]);
 
   useEffect(() => {
     const targetId = focusedRecordId ?? null;
     
     if (targetId) {
-      const record = records.find(r => r.id === targetId);
+      const record = focusRecords.find(r => r.id === targetId);
       if (record) {
         onRotationChange([-record.longitude, -record.latitude, 0]);
       }
     }
-  }, [focusedRecordId, records, onRotationChange]);
+  }, [focusedRecordId, focusRecords, onRotationChange]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -171,7 +181,7 @@ const Map: React.FC<MapProps> = ({
 
   // Group todayRecords by coordinate proximity for Wakeup Today mode
   const groupedRecords = useMemo(() => {
-    if (!isWakeupMode) return [];
+    if (!isWakeupMode || layerFilter === "reservations") return [];
     const groups: Record<string, { records: NotionRecord[]; lat: number; lon: number }> = {};
     todayRecords.forEach(r => {
       const key = `${r.latitude.toFixed(2)}_${r.longitude.toFixed(2)}`;
@@ -181,7 +191,7 @@ const Map: React.FC<MapProps> = ({
       groups[key].records.push(r);
     });
     return Object.values(groups);
-  }, [todayRecords, isWakeupMode]);
+  }, [todayRecords, isWakeupMode, layerFilter]);
 
   // Create a d3 projection to calculate 2D coordinates for custom paths
   const projection = useMemo(() => {
@@ -379,6 +389,8 @@ const Map: React.FC<MapProps> = ({
           </g>
         )}
 
+        <ReservationMapLayer targets={visibleTargets} pairs={comparisonPairs} filter={layerFilter} projection={projection} isVisible={isVisible} onSelect={onSelectRecord} language={language} fontSize={getStableSvgSize(11, overlayScale)} selectedId={focusedRecordId} />
+
         {/* Wakeup Today Mode: Pulsing Group Markers */}
         {isWakeupMode && groupedRecords.map((group, idx) => {
           if (!isVisible(group.lon, group.lat)) return null;
@@ -510,6 +522,10 @@ const Map: React.FC<MapProps> = ({
                   fill="#000"
                 />
                 
+                {record.wakeEventId ? <>
+                  <title>{`${language === "zh" ? "實際甦醒位置" : "Actual awakening"} · ${cityLabel}`}</title>
+                  <text y={16} textAnchor="middle" fontSize={getStableSvgSize(11, overlayScale)} fontFamily="monospace" fill="black" stroke="white" strokeWidth={3} paintOrder="stroke">{language === "zh" ? "實際甦醒位置" : "Actual awakening"} · {cityLabel}</text>
+                </> : null}
                 {/* Selection Ring - neon green glow */}
                 {isSelected && (
                   <motion.circle
@@ -524,7 +540,7 @@ const Map: React.FC<MapProps> = ({
                 )}
 
                 {/* Label for selected/highlighted - Centered above as in screenshot */}
-                {(isSelected || isHighlighted) && (
+                {(isSelected || isHighlighted) && !record.wakeEventId && (
                   <>
                     <rect
                       x={labelHitArea.x}

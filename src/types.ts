@@ -2,6 +2,8 @@ import type { WakeAcknowledgementMetadata } from "./wakeAcknowledgement";
 
 export interface NotionRecord extends WakeAcknowledgementMetadata {
   id: string;
+  mapPointKind?: "reservation";
+  linkedWakeRecordId?: string;
   userName?: string;
   city: string;
   cityZh?: string;

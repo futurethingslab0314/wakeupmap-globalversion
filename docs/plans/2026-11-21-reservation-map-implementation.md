@@ -26,3 +26,10 @@
 - Extend tests/serverless-runtime.test.mjs to include the new runtime modules and execute the opt-in map API with mocked Notion data from emitted JS and real city JSON.
 - Run npm run lint, npm run build, serverless tests, booking/awake/alarm/update tests, and core tests affected by map changes. Check WakeUpHere markup unchanged and git diff --check.
 - Commit, push HEAD:main to the existing GitHub repo, wait for Vercel CI success, verify public GET map/records/icon endpoints, and safely sync changed files into the shared workspace. Do not create fake production bookings or awakenings.
+
+## Verification results
+
+- 150 core, reservation, UI rendering, alarm, queue and booking tests passed; 2 emitted-JavaScript serverless/icon tests passed separately without tsx.
+- TypeScript check, production build and git diff --check passed.
+- Real Chrome desktop (1440×960) and mobile (390×844): three filters, two reservation markers / one actual marker fixture, comparison distance, pending/completed journal rows, reservation details, horizontal journal scrolling, Chinese labels, failed-read snapshot retention, cancellation, and out-of-order read protection passed with no page errors. Fixtures were intercepted locally; no fake production records were written.
+- WakeUpHere public files are unchanged. Repeated reserve writes for the same still-active city preserve the original booking timestamp so browser reloads do not incorrectly remove today's reservation.

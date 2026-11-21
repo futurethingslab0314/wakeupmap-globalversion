@@ -3,7 +3,7 @@ import { getRecordRecipe } from "./i18n";
 import type { NotionRecord } from "./types";
 
 export function isRecordPreparing(record: NotionRecord | null, language: UiLanguage): boolean {
-  return !!record && !record.wakeEventId && !record.imageUrl && !getRecordRecipe(record, language);
+  return !!record && !record.wakeEventId && record.mapPointKind !== "reservation" && !record.imageUrl && !getRecordRecipe(record, language);
 }
 
 export function getCompletedRecordFromSnapshot(

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import WakeMapFilter from "./components/WakeMapFilter";
+import JournalRecordRow from "./components/JournalRecordRow";
+import { buildReservationMapState, getReservationJournalRows, filterReservationsForUser, getLocalDate, type WakeReservation, type WakeMapFilter as MapLayerFilter } from "./reservationMap";
 import Map from "./components/Map";
 import DetailsPanel from "./components/DetailsPanel";
 import ParticleStorm from "./components/ParticleStorm";
 import { NotionRecord, WakeUpNowResponse } from "./types";
 import { getIdentityPresenceState, getInitialIdentityState, normalizeIdentityName } from "./entryState";
 import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
-import { getJournalDateLabel } from "./journalTable";
-import { formatWakePressTime, formatWakeDistance } from "./wakeAcknowledgement";
 import { getHeaderAnimationState, getLanguageToggleState, getMobileNavVisibility, getMobileView } from "./layoutState";
 import {
   getMobileCurrentBaseLabelClassName,
@@ -42,6 +43,10 @@ export default function App() {
     typeof window !== "undefined"
       ? getInitialIdentityState(window.location.search)
       : { userName: "", isNameConfirmed: false, shouldShowEntryScreen: true };
+  const [reservations, setReservations] = useState<WakeReservation[]>([]);
+  const [reservationError, setReservationError] = useState(false);
+  const latestReservationRequest = useRef(0);
+  const [layerFilter, setLayerFilter] = useState<MapLayerFilter>("all");
   const [records, setRecords] = useState<NotionRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<NotionRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -98,17 +103,30 @@ export default function App() {
 
     return filterRecordsForUser(records, userName);
   }, [records, isNameConfirmed, userName]);
-  const showIdentityEmptyState = isNameConfirmed && !loading && visibleRecords.length === 0 && !showWakeupToday;
+  const visibleReservations = React.useMemo(() => isNameConfirmed ? filterReservationsForUser(reservations, userName) : reservations, [reservations, isNameConfirmed, userName]);
+  const personalReservationState = React.useMemo(() => buildReservationMapState(visibleRecords, visibleReservations, currentTime), [visibleRecords, visibleReservations, currentTime]);
+  const reservationState = React.useMemo(() => showWakeupToday ? buildReservationMapState(records, reservations, currentTime) : personalReservationState, [showWakeupToday, records, reservations, currentTime, personalReservationState]);
+  const selectableRecords = React.useMemo(() => [...visibleRecords, ...reservationState.targets], [visibleRecords, reservationState.targets]);
+  const showIdentityEmptyState = isNameConfirmed && !loading && visibleRecords.length === 0 && personalReservationState.targets.length === 0 && !showWakeupToday;
   const hasReadyBreakfastRefresh = !!selectedRecord && readyBreakfastRecordId === selectedRecord.id;
 
   const sortedRecords = React.useMemo(() => {
-    return getRecordsSortedByRecordedAt(visibleRecords);
-  }, [visibleRecords]);
+    return getRecordsSortedByRecordedAt(getReservationJournalRows(visibleRecords, personalReservationState.targets));
+  }, [visibleRecords, personalReservationState.targets]);
+
+  useEffect(() => {
+    setHighlightedJournalIndex(index => Number.isFinite(index) ? Math.min(index, Math.max(0, sortedRecords.length - 1)) : 0);
+  }, [sortedRecords.length]);
 
   const todayRecords = React.useMemo(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    return getLatestRecordsForDateByUser(records, todayStr);
-  }, [records]);
+    const todayStr = currentTime.toISOString().slice(0, 10);
+    const legacy = getLatestRecordsForDateByUser(records.filter(r => !r.wakeEventId), todayStr);
+    const acknowledged = records.filter(record => {
+      try { return Boolean(record.wakeEventId && record.wakeScheduledAt && record.wakeTargetTimeZone && getLocalDate(record.wakeScheduledAt, record.wakeTargetTimeZone) === getLocalDate(currentTime, record.wakeTargetTimeZone)); }
+      catch { return false; }
+    });
+    return [...legacy, ...acknowledged];
+  }, [records, currentTime]);
 
   const toggleWakeupToday = () => {
     soundService.playClick();
@@ -155,14 +173,14 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedRecord) return;
-    const latest = visibleRecords.find((record) => record.id === selectedRecord.id);
+    const latest = selectableRecords.find((record) => record.id === selectedRecord.id);
     if (latest && latest !== selectedRecord) {
       setSelectedRecord(latest);
     }
     if (!latest) {
       setSelectedRecord(null);
     }
-  }, [visibleRecords, selectedRecord]);
+  }, [selectableRecords, selectedRecord]);
 
   useEffect(() => {
     const previousViewState = previousViewStateRef.current;
@@ -179,6 +197,21 @@ export default function App() {
 
     setRotation([-latestRecord.longitude, -latestRecord.latitude, 0]);
   }, [currentViewState, visibleRecords]);
+
+  const fetchReservations = useCallback(async () => {
+    const requestId = ++latestReservationRequest.current;
+    try {
+      const response = await fetch("/api/wakeuphere?view=map", { cache: "no-store", signal: AbortSignal.timeout(15000) });
+      const payload = await response.json();
+      if (!response.ok || !Array.isArray(payload?.reservations)) throw new Error("Reservation fetch failed");
+      if (requestId !== latestReservationRequest.current) return;
+      setReservations(payload.reservations);
+      setReservationError(false);
+    } catch {
+      // Preserve the last successful snapshot; never turn a failed read into cancellations.
+      if (requestId === latestReservationRequest.current) setReservationError(true);
+    }
+  }, []);
 
   const loadRecordsSnapshot = useCallback(async (): Promise<NotionRecord[]> => {
     const response = await fetch("/api/notion-data", {
@@ -429,12 +462,13 @@ export default function App() {
   }, [visibleRecords]);
 
   useEffect(() => {
-    const refresh = () => { void fetchData({ showLoading: false }).catch(() => {}); };
+    const refresh = () => { setCurrentTime(new Date()); void fetchData({ showLoading: false }).catch(() => {}); void fetchReservations(); };
     void fetchData().catch(() => {});
-    const timer = setInterval(() => { setCurrentTime(new Date()); refresh(); }, 60000);
+    void fetchReservations();
+    const timer = setInterval(refresh, 60000);
     window.addEventListener("focus", refresh);
     return () => { clearInterval(timer); window.removeEventListener("focus", refresh); };
-  }, [fetchData]);
+  }, [fetchData, fetchReservations]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -552,6 +586,7 @@ export default function App() {
 
       if (e.key === "ArrowDown") {
         if (showDatabase) {
+          if (!sortedRecords.length) return;
           // Highlight next in journal
           setHighlightedJournalIndex(prev => (prev + 1) % sortedRecords.length);
           soundService.playHover();
@@ -566,6 +601,7 @@ export default function App() {
         soundService.playClick();
       } else if (e.key === "ArrowUp") {
         if (showDatabase) {
+          if (!sortedRecords.length) return;
           // Highlight prev in journal
           setHighlightedJournalIndex(prev => (prev - 1 + sortedRecords.length) % sortedRecords.length);
           soundService.playHover();
@@ -780,6 +816,9 @@ export default function App() {
       >
         <Map
           records={visibleRecords}
+          reservationTargets={reservationState.targets}
+          comparisonPairs={reservationState.pairs}
+          layerFilter={layerFilter}
           language={language}
           rotation={rotation}
           onRotationChange={setRotation}
@@ -802,6 +841,17 @@ export default function App() {
           }}
         />
       </motion.div>
+
+      {!showEntryScreen && !showDatabase && !hasDetailPanelOpen ? (
+        <div className="absolute left-4 right-4 z-30 max-w-[390px] pointer-events-auto lg:left-auto lg:right-10 lg:top-28 lg:max-w-[390px]" style={isMobileViewport ? { top: "calc(var(--safe-top) + 164px)" } : undefined}>
+          <WakeMapFilter value={layerFilter} onChange={value => {
+            setLayerFilter(value); setSelectedRecord(null); setSelectedCountry(null); setSelectedGroup(null);
+            soundService.playClick();
+          }} language={language} pendingCount={reservationState.targets.length} actualCount={showWakeupToday ? todayRecords.length : visibleRecords.length} />
+          {reservationError ? <p role="status" className="mt-2 bg-white/95 px-2 py-1 font-mono text-[10px] leading-relaxed text-[#a95018]">{language === "zh" ? "預約資料暫時無法更新，保留上次資料並自動重試。" : "Reservations could not refresh. Keeping the last snapshot and retrying."}</p> : null}
+          {layerFilter === "reservations" && reservationState.targets.length === 0 && !reservationError ? <p role="status" className="mt-2 bg-white/95 px-2 py-1 font-mono text-[10px] text-gray-500">{language === "zh" ? "今天沒有有效預約。" : "No valid reservations for today."}</p> : null}
+        </div>
+      ) : null}
 
       {/* Top Left: Header & Menu */}
       <motion.div 
@@ -1171,64 +1221,29 @@ export default function App() {
                 </div>
               </div>
 
+              <p className="mb-3 font-mono text-[10px] text-gray-500 lg:hidden">{language === "zh" ? "左右滑動表格，查看實際位置與距離。" : "Swipe the table to see actual positions and distances."}</p>
               <div className="flex-1 relative overflow-hidden group/scroll">
                 <div
                   className="absolute inset-0 overflow-y-auto custom-scrollbar lg:pr-6"
                   style={{ paddingBottom: "calc(var(--safe-bottom) + var(--mobile-footer-height) + 24px)" }}
                 >
                   <div className="-mx-5 overflow-x-auto px-5 lg:mx-0 lg:px-0">
-                    <table className="min-w-[680px] text-left font-mono text-[11px] lg:min-w-full">
+                    <table className="min-w-[880px] w-full text-left font-mono text-[11px]">
                       <thead>
                         <tr className="border-b border-black/10 text-gray-400 uppercase tracking-widest">
                           <th className="py-6 px-4 font-medium">{text.date}</th>
-                          <th className="py-6 px-4 font-medium">{text.location}</th>
-                          <th className="py-6 px-4 font-medium">{text.greeting}</th>
+                          <th className="py-6 px-4 font-medium">{language === "zh" ? "預約甦醒位置" : "Reserved position"}</th>
+                          <th className="py-6 px-4 font-medium">{language === "zh" ? "實際甦醒位置" : "Actual position"}</th>
+                          <th className="py-6 px-4 font-medium">{language === "zh" ? "距離" : "Distance"}</th>
+                          <th className="py-6 px-4 font-medium">{language === "zh" ? "狀態／問候" : "Status / Greeting"}</th>
                           <th className="py-6 px-4 font-medium">{text.action}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-black/5">
                         {sortedRecords.map((record, idx) => (
-                          <tr 
-                            key={record.id} 
-                            className={`transition-colors group ${highlightedJournalIndex === idx ? 'bg-black/5' : 'hover:bg-black/[0.02]'}`}
-                            onMouseEnter={() => {
-                              setHighlightedJournalIndex(idx);
-                              soundService.playHover();
-                            }}
-                          >
-                            <td className={`py-4 px-4 tabular-nums ${highlightedJournalIndex === idx ? "text-black" : "text-gray-300"}`}>
-                              {getJournalDateLabel(record)}
-                              {record.wakeEventId ? <div className="mt-1 text-[10px] text-gray-500">
-                                {formatWakePressTime(record,language)} // {record.wakeTimeZone}
-                              </div> : null}
-                            </td>
-                            <td className="py-4 px-4">
-                              <div className="font-bold text-gray-900 uppercase">{getRecordCity(record, language)}</div>
-                              <div className="text-[9px] text-gray-400 uppercase tracking-widest">{getRecordCountry(record, language)}</div>
-                              {record.wakeEventId ? <div className="mt-2 text-[10px] leading-relaxed text-gray-500">
-                                {language === "zh" ? "預約：" : "Reserved: "}
-                                {language === "zh" ? record.wakeTargetCityZh || record.wakeTargetCity : record.wakeTargetCity}
-                                {" // "}{formatWakeDistance(record)}
-                              </div> : null}
-                            </td>
-                            <td className="py-4 px-4 text-gray-500">
-                              <div className="max-w-[280px] whitespace-normal leading-relaxed">
-                                {record.greeting}
-                              </div>
-                            </td>
-                            <td className="py-4 px-4">
-                              <button
-                                onClick={() => {
-                                  soundService.playClick();
-                                  setSelectedRecord(record);
-                                  setShowDatabase(false);
-                                }}
-                                className="text-[9px] uppercase tracking-widest text-gray-400 hover:text-black transition-colors"
-                              >
-                                {text.viewDetails}
-                              </button>
-                            </td>
-                          </tr>
+                          <React.Fragment key={record.id}><JournalRecordRow record={record} language={language} highlighted={highlightedJournalIndex === idx}
+                            onHover={() => { setHighlightedJournalIndex(idx); soundService.playHover(); }}
+                            onSelect={() => { soundService.playClick(); setSelectedRecord(record); setShowDatabase(false); }} /></React.Fragment>
                         ))}
                       </tbody>
                     </table>
@@ -1319,7 +1334,7 @@ export default function App() {
         record={selectedRecord}
         country={selectedCountry}
         group={selectedGroup}
-        records={visibleRecords}
+        records={showWakeupToday ? records : visibleRecords}
         language={language}
         hasBreakfastRefreshReady={hasReadyBreakfastRefresh}
         onRefreshBreakfast={hasReadyBreakfastRefresh ? refreshReadyBreakfast : undefined}

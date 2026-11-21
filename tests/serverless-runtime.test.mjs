@@ -9,7 +9,7 @@ import {pathToFileURL} from 'node:url';
 // Exercise emitted JS with Node's production ESM loader, without tsx resolving source extensions.
 test('compiled serverless API entrypoints load and handle requests without a TypeScript loader', async () => {
  const root=await mkdtemp(join(tmpdir(),'wakeup-serverless-test-'));
- const files=['api/notion-data.ts','api/wakeuphere.ts','api/wake-up-now.ts','src/wakeAcknowledgement.ts','src/server/services/wakeuphereAcknowledgement.ts'];
+ const files=['api/notion-data.ts','api/wakeuphere.ts','api/wake-up-now.ts','src/wakeAcknowledgement.ts','src/server/services/wakeuphereAcknowledgement.ts','src/reservationMap.ts','src/server/services/wakeuphereMapBookings.ts'];
  try {
   await writeFile(join(root,'package.json'),'{"type":"module"}');
   await cp('cities_data.json',join(root,'cities_data.json'));
@@ -24,6 +24,22 @@ test('compiled serverless API entrypoints load and handle requests without a Typ
    const response={statusCode:200,setHeader(){},status(n){this.statusCode=n;return this;},json(body){this.body=body;return this;}};
    await handler({method:'DELETE',query:{}},response);
    assert.equal(response.statusCode,405);
+   if(endpoint==='wakeuphere'){
+    const oldFetch=globalThis.fetch,oldKey=process.env.NOTION_API_KEY,oldDb=process.env.WAKEUPHERE_PAGE_ID;
+    process.env.NOTION_API_KEY='test';process.env.WAKEUPHERE_PAGE_ID='test';
+    const text=(value)=>({rich_text:[{plain_text:value}]});
+    globalThis.fetch=async url=>Response.json(String(url).endsWith('/query')?{results:[{id:'fixture-booking',properties:{userName:{title:[{plain_text:'YuPie'}]},setup_city:text('Dubai'),setup_country:text('United Arab Emirates'),wakeuphere_active:{checkbox:true},wakeuphere_updated_at:{date:{start:'2020-01-01T00:00:00Z'}}}}],has_more:false}:{properties:{userName:{type:'title'},setup_city:{type:'rich_text'},setup_country:{type:'rich_text'}}});
+    try{
+     await handler({method:'GET',url:'/api/wakeuphere?view=map'},response);
+     assert.equal(response.statusCode,200);assert.equal(response.body.reservations.length,1);
+     assert.equal(response.body.reservations[0].timeZone,'Asia/Dubai');
+     assert.equal(typeof response.body.reservations[0].latitude,'number');
+    } finally{
+     globalThis.fetch=oldFetch;
+     if(oldKey===undefined)delete process.env.NOTION_API_KEY;else process.env.NOTION_API_KEY=oldKey;
+     if(oldDb===undefined)delete process.env.WAKEUPHERE_PAGE_ID;else process.env.WAKEUPHERE_PAGE_ID=oldDb;
+    }
+   }
   }
  } finally {await rm(root,{recursive:true,force:true});}
 });

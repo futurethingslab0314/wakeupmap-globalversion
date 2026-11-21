@@ -26,3 +26,7 @@ WakeUp Map 在視窗重新取得焦點時及每 60 秒更新紀錄。Ctrl+H 模�
 預約狀態繼續使用 `WAKEUPHERE_PAGE_ID`；醒來紀錄寫入 WakeUp Map 的 `NOTION_DATABASE_ID`。同一 Notion integration 必須有兩個資料庫的讀寫與更新欄位權限。缺少主資料庫設定或寫入失敗時，事件留在佇列重試。
 
 後端會新增 `wakeuphere_` 前綴的事件識別、帳號、按下時間、排程時間、Pi 時區、目標城市座標與時區、距離和延遲欄位；保留既有紀錄欄位與內容。部署不會建立假醒來資料，需下一次真正鬧鐘確認才會產生紀錄。
+
+## 預約與實際位置比較
+
+地球圖篩選與 Review Journal 預約欄位，詳見 [預約與實際甦醒地圖](wakeuphere-reservation-map.md)。

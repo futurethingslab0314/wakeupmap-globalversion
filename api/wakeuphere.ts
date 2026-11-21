@@ -1,3 +1,4 @@
+import { getMapReservations } from "../src/server/services/wakeuphereMapBookings.js";
 import { recordWakeAcknowledgement } from "../src/server/services/wakeuphereAcknowledgement.js";
 
 type NotionPropertyDefinition = {
@@ -249,6 +250,9 @@ export default async function handler(
 
     if (request.method === "GET") {
       const query = pickRequestQuery(request);
+      if (query.get("view") === "map") {
+        return response.status(200).json({ reservations: getMapReservations(records), refreshedAt: new Date().toISOString() });
+      }
       const city = query.get("setup_city") || query.get("city") || "";
       const cityZh = query.get("setup_city_zh") || query.get("city_zh") || "";
       const country = query.get("setup_country") || query.get("country") || "";
@@ -308,7 +312,12 @@ export default async function handler(
     }
     if (action !== "dismiss") {
       properties[ACTIVE_FIELD] = { checkbox: action === "reserve" };
-      properties[UPDATED_FIELD] = { date: { start: new Date().toISOString() } };
+      // A Pi reload re-sends the same active reservation. It must not move
+      // the original booking past today's 08:00 deadline. Rebooking after
+      // cancellation or moving to another city still gets a new timestamp.
+      if (!(action === "reserve" && current?.active && sameLocation && current.updatedAt > 0)) {
+        properties[UPDATED_FIELD] = { date: { start: new Date().toISOString() } };
+      }
     }
     if (pressField && (action !== "reserve" || !current?.active || !sameLocation)) {
       properties[pressField] = schema[pressField]?.type === "checkbox"

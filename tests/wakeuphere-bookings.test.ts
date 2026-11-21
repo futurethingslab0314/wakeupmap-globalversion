@@ -144,3 +144,33 @@ test('invalid requests do not create fallback accounts or mutate data', async ()
     assert.equal(writes.length,0);
   });
 });
+
+test('map view exposes only latest active canonical targets and city-local scheduled dates without changing roster response',async()=>{
+  await backend([
+    page('old','YuPie','Anchorage','2026-11-01T00:00:00Z',true,'United States'),
+    page('latest','YuPie','Dubai','2026-11-20T00:00:00Z',true,'United Arab Emirates'),
+    page('cancelled','Bob','Dubai','2026-11-20T00:00:00Z',false,'United Arab Emirates'),
+    page('invalid','Invalid','Imaginary City','2026-11-20T00:00:00Z',true,'Nowhere'),
+  ],async request=>{
+    const result=await request('GET',undefined,'?view=map');
+    assert.equal(result.status,200);assert.equal(result.data.reservations.length,1);
+    const target=result.data.reservations[0];
+    assert.equal(target.userName,'YuPie');assert.equal(target.city,'Dubai');
+    assert.equal(target.timeZone,'Asia/Dubai');assert.equal(typeof target.latitude,'number');
+    assert.equal(typeof target.longitude,'number');assert.match(target.scheduledAt,/T04:00:00.000Z$/);
+    assert.equal(result.headers['Cache-Control'],'no-store');
+    const roster=await request('GET',undefined,'?setup_city=Dubai&setup_country=United%20Arab%20Emirates');
+    assert.deepEqual(roster.data.users,['YuPie']);assert.equal(roster.data.reservations,undefined);
+  });
+});
+
+test('reloading an unchanged active reservation preserves its original booking time for the local-day map',async()=>{
+ const original='2026-11-20T00:00:00Z';
+ await backend([page('existing','YuPie','Dubai',original,true,'United Arab Emirates')],async(request,writes)=>{
+  const response=await request('POST',{action:'reserve',userName:'YuPie',setup_city:'Dubai',setup_country:'United Arab Emirates'});
+  assert.equal(response.status,200);
+  const patch=writes.find(write=>write.path.endsWith('/pages/existing'));
+  assert(!patch.properties.wakeuphere_updated_at || patch.properties.wakeuphere_updated_at.date.start===original);
+  assert.equal((await request('GET',undefined,'?view=map')).data.reservations.length,1);
+ });
+});

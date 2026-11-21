@@ -13,6 +13,9 @@ interface CountryVisitStats {
 }
 
 function getRecordedAtTimestamp(record: NotionRecord): number {
+  if (record.mapPointKind === "reservation" && record.wakeScheduledAt && Number.isFinite(Date.parse(record.wakeScheduledAt))) {
+    return Date.parse(record.wakeScheduledAt);
+  }
   if (record.wakePressedAt && Number.isFinite(Date.parse(record.wakePressedAt))) {
     return Date.parse(record.wakePressedAt);
   }

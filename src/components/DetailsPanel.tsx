@@ -7,6 +7,7 @@ import { getBreakfastImageFrameClassName } from "../detailsPanelStyles";
 import { isRecordPreparing } from "../recordSync";
 import { getCityVisitCount, getCountryVisitStats } from "../mapSelection";
 import { formatWakePressTime } from "../wakeAcknowledgement";
+import ReservationDetails from "./ReservationDetails";
 import WakeAcknowledgementDetails from "./WakeAcknowledgementDetails";
 
 interface DetailsPanelProps {
@@ -151,6 +152,8 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({
                     </div>
                   )}
                 </section>
+              ) : record?.mapPointKind === "reservation" ? (
+                <ReservationDetails record={record} language={language} actualRecord={records.find(r => r.id === record.linkedWakeRecordId)} />
               ) : record?.wakeEventId ? (
                 <WakeAcknowledgementDetails record={record} language={language} />
               ) : record ? (
