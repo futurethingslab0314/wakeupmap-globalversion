@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { captureWakeUpContext, getDistanceBetweenCoordinates, getRecentCityNames, selectCity } from '../../../api/wake-up-now.ts';
+import { captureWakeUpContext, getDistanceBetweenCoordinates, getRecentCityNames, selectCity } from '../../../api/wake-up-now.js';
 
 type Schema = Record<string, { type?: string }>;
 type Input = { userName: string; setup_city?: string; setup_city_zh?: string; setup_country?: string; setup_country_zh?: string; wakeEvent: unknown };

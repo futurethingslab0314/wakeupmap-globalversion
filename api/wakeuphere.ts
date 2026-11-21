@@ -1,4 +1,4 @@
-import { recordWakeAcknowledgement } from "../src/server/services/wakeuphereAcknowledgement.ts";
+import { recordWakeAcknowledgement } from "../src/server/services/wakeuphereAcknowledgement.js";
 
 type NotionPropertyDefinition = {
   type?: string;

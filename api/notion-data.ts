@@ -1,4 +1,4 @@
-import { readWakeAcknowledgement } from "../src/wakeAcknowledgement.ts";
+import { readWakeAcknowledgement } from "../src/wakeAcknowledgement.js";
 
 const fallbackLocations = [
   {
