@@ -2,7 +2,6 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import dotenv from "dotenv";
-import { handleNotionDataRequest } from "./src/server/routes/notionData";
 import { createWakeUpImageHandler } from "./src/server/routes/wakeUpImage";
 import { createWakeUpNowHandler } from "./src/server/routes/wakeUpNow";
 import { runWakeUpImage } from "./src/server/pipelines/runWakeUpImage";
@@ -10,6 +9,8 @@ import { runWakeUpNow } from "./src/server/pipelines/runWakeUpNow";
 import { createNotionClient } from "./src/server/services/notion";
 import { createOpenAIClient } from "./src/server/services/openai";
 import { createR2Client } from "./src/server/services/r2";
+import wakeupHereHandler from "./api/wakeuphere";
+import notionDataHandler from "./api/notion-data";
 
 dotenv.config();
 
@@ -21,8 +22,9 @@ async function startServer() {
 
   // API Route to fetch local data
   app.get("/api/notion-data", async (req, res) => {
-    await handleNotionDataRequest(req, res);
+    await notionDataHandler(req, res);
   });
+  app.all("/api/wakeuphere", async (req, res) => { await wakeupHereHandler(req, res); });
 
   app.post(
     "/api/wake-up-now",

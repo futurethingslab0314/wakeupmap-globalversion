@@ -12,7 +12,8 @@
     "test:server": "tsx --test src/server/__tests__/*.test.ts",
     "test:wakeuphere-update": "node --test tests/wakeuphere-update.test.mjs",
     "test:wakeuphere-alarm": "node --test tests/wakeuphere-alarm*.test.mjs",
-    "test:wakeuphere-bookings": "node --import tsx --test tests/wakeuphere-bookings.test.ts tests/wakeuphere-booking-client.test.mjs"
+    "test:wakeuphere-bookings": "node --import tsx --test tests/wakeuphere-bookings.test.ts tests/wakeuphere-booking-client.test.mjs",
+    "test:wakeuphere-awake": "node --import tsx --test tests/wakeuphere-awake.test.ts tests/wakeuphere-map-display.test.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

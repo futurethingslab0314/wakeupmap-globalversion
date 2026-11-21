@@ -13,6 +13,9 @@ interface CountryVisitStats {
 }
 
 function getRecordedAtTimestamp(record: NotionRecord): number {
+  if (record.wakePressedAt && Number.isFinite(Date.parse(record.wakePressedAt))) {
+    return Date.parse(record.wakePressedAt);
+  }
   if (record.recordedAtDate) {
     const timePart = record.recordedAt?.trim() || "00:00:00";
     const match = timePart.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);

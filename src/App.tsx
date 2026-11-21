@@ -6,6 +6,7 @@ import { NotionRecord, WakeUpNowResponse } from "./types";
 import { getIdentityPresenceState, getInitialIdentityState, normalizeIdentityName } from "./entryState";
 import { getRecordCity, getRecordCountry, uiText, UiLanguage } from "./i18n";
 import { getJournalDateLabel } from "./journalTable";
+import { formatWakePressTime, formatWakeDistance } from "./wakeAcknowledgement";
 import { getHeaderAnimationState, getLanguageToggleState, getMobileNavVisibility, getMobileView } from "./layoutState";
 import {
   getMobileCurrentBaseLabelClassName,
@@ -428,9 +429,11 @@ export default function App() {
   }, [visibleRecords]);
 
   useEffect(() => {
-    fetchData();
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
+    const refresh = () => { void fetchData({ showLoading: false }).catch(() => {}); };
+    void fetchData().catch(() => {});
+    const timer = setInterval(() => { setCurrentTime(new Date()); refresh(); }, 60000);
+    window.addEventListener("focus", refresh);
+    return () => { clearInterval(timer); window.removeEventListener("focus", refresh); };
   }, [fetchData]);
 
   useEffect(() => {
@@ -1195,10 +1198,18 @@ export default function App() {
                           >
                             <td className={`py-4 px-4 tabular-nums ${highlightedJournalIndex === idx ? "text-black" : "text-gray-300"}`}>
                               {getJournalDateLabel(record)}
+                              {record.wakeEventId ? <div className="mt-1 text-[10px] text-gray-500">
+                                {formatWakePressTime(record,language)} // {record.wakeTimeZone}
+                              </div> : null}
                             </td>
                             <td className="py-4 px-4">
                               <div className="font-bold text-gray-900 uppercase">{getRecordCity(record, language)}</div>
                               <div className="text-[9px] text-gray-400 uppercase tracking-widest">{getRecordCountry(record, language)}</div>
+                              {record.wakeEventId ? <div className="mt-2 text-[10px] leading-relaxed text-gray-500">
+                                {language === "zh" ? "預約：" : "Reserved: "}
+                                {language === "zh" ? record.wakeTargetCityZh || record.wakeTargetCity : record.wakeTargetCity}
+                                {" // "}{formatWakeDistance(record)}
+                              </div> : null}
                             </td>
                             <td className="py-4 px-4 text-gray-500">
                               <div className="max-w-[280px] whitespace-normal leading-relaxed">

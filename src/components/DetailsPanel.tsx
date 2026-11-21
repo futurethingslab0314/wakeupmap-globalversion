@@ -6,6 +6,8 @@ import { X, Coffee, Globe2, Layers, RefreshCw } from "lucide-react";
 import { getBreakfastImageFrameClassName } from "../detailsPanelStyles";
 import { isRecordPreparing } from "../recordSync";
 import { getCityVisitCount, getCountryVisitStats } from "../mapSelection";
+import { formatWakePressTime } from "../wakeAcknowledgement";
+import WakeAcknowledgementDetails from "./WakeAcknowledgementDetails";
 
 interface DetailsPanelProps {
   record: NotionRecord | null;
@@ -136,7 +138,7 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({
                               {r.userName || 'Unknown'}
                             </div>
                             <div className="font-mono text-[10px] text-gray-400 uppercase tracking-widest mt-1">
-                              {text.statusAwake} // {r.recordedAtDate ? new Date(r.recordedAtDate).toLocaleTimeString() : 'N/A'}
+                              {text.statusAwake} // {r.wakeEventId ? formatWakePressTime(r, language) : r.recordedAtDate ? new Date(r.recordedAtDate).toLocaleTimeString() : 'N/A'}
                             </div>
                             <div className="font-mono text-[10px] text-gray-300 uppercase tracking-widest mt-0.5">
                               {getRecordCity(r, language)}, {getRecordCountry(r, language)}
@@ -149,6 +151,8 @@ const DetailsPanel: React.FC<DetailsPanelProps> = ({
                     </div>
                   )}
                 </section>
+              ) : record?.wakeEventId ? (
+                <WakeAcknowledgementDetails record={record} language={language} />
               ) : record ? (
                 <>
                   {/* Story Section */}

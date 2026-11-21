@@ -1,4 +1,5 @@
 import type { NormalizedNotionRecord, NotionClient } from "../types";
+import { readWakeAcknowledgement } from "../../wakeAcknowledgement";
 import {
   getDateProperty,
   getMultiSelectProperty,
@@ -21,19 +22,21 @@ function normalizeRecord(page: unknown): NormalizedNotionRecord {
       ? (pageObject.properties as Record<string, unknown>)
       : {};
 
-  const city = getTitleProperty(properties, "City");
-  const cityZh = getRichTextProperty(properties, "City ZH") || city;
-  const country = getRichTextProperty(properties, "Country");
-  const countryZh = getRichTextProperty(properties, "Country ZH") || country;
-  const story = getRichTextProperty(properties, "Story");
-  const storyZh = getRichTextProperty(properties, "Story ZH") || story;
-  const recordedAtDate = getDateProperty(properties, "Recorded At");
+  const wake = readWakeAcknowledgement(properties);
+  const city = getTitleProperty(properties, "City") || getRichTextProperty(properties,"City") || getRichTextProperty(properties,"city");
+  const cityZh = getRichTextProperty(properties, "City ZH") || getRichTextProperty(properties,"city_zh") || city;
+  const country = getRichTextProperty(properties, "Country") || getRichTextProperty(properties,"country");
+  const countryZh = getRichTextProperty(properties, "Country ZH") || getRichTextProperty(properties,"country_zh") || country;
+  const story = getRichTextProperty(properties, "Story") || getRichTextProperty(properties,"story");
+  const storyZh = getRichTextProperty(properties, "Story ZH") || getRichTextProperty(properties,"story_zh") || story;
+  const recordedAtDate = getDateProperty(properties,"recordedAtDate") || getDateProperty(properties, "Recorded At");
   const motifsText = getRichTextProperty(properties, "Motifs");
   const visualAnchorsText = getRichTextProperty(properties, "Visual Anchors");
 
   return {
+    ...wake,
     id: "id" in pageObject && typeof pageObject.id === "string" ? pageObject.id : "",
-    userName: getTitleProperty(properties, "User Name") || getTitleProperty(properties, "Name"),
+    userName: getRichTextProperty(properties,"wakeuphere_user_name") || getTitleProperty(properties, "User Name") || getTitleProperty(properties, "Name") || getTitleProperty(properties,"userName"),
     city,
     cityZh,
     city_zh: cityZh,
@@ -64,11 +67,12 @@ function normalizeRecord(page: unknown): NormalizedNotionRecord {
       : getMultiSelectProperty(properties, "Visual Anchors"),
     avoidRepeats: getRichTextProperty(properties, "Avoid Repeats"),
     imageUrl: getUrlProperty(properties, "Image URL"),
-    latitude: getNumberProperty(properties, "Latitude"),
-    longitude: getNumberProperty(properties, "Longitude"),
+    latitude: getNumberProperty(properties, "Latitude") || getNumberProperty(properties,"latitude"),
+    longitude: getNumberProperty(properties, "Longitude") || getNumberProperty(properties,"longitude"),
     utcOffset: getNumberProperty(properties, "UTC Offset"),
-    createdAt: recordedAtDate,
+    createdAt: wake.wakePressedAt || recordedAtDate,
     recordedAtDate,
+    recordedAt: getRichTextProperty(properties,"recordedAt"),
   };
 }
 

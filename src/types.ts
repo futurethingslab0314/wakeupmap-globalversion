@@ -1,4 +1,6 @@
-export interface NotionRecord {
+import type { WakeAcknowledgementMetadata } from "./wakeAcknowledgement";
+
+export interface NotionRecord extends WakeAcknowledgementMetadata {
   id: string;
   userName?: string;
   city: string;

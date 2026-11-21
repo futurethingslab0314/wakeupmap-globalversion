@@ -702,7 +702,7 @@
         send: async payload => {
           const response = await fetch(WAKEUPHERE_API_PATH, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload), signal: AbortSignal.timeout(10000),
+            body: JSON.stringify(payload), signal: AbortSignal.timeout(payload.wakeEvent ? 60000 : 10000),
           });
           const result = await response.json();
           if (!response.ok || !result?.ok) throw new Error("Booking sync failed");
@@ -713,12 +713,13 @@
 
     function syncWakeupHereIdentity(options = {}) {
       const { press = false, action = press ? "dismiss" : "reserve",
-        userName = getStoredUserName(), city = selectedCity, country = selectedCountry } = options;
+        userName = getStoredUserName(), city = selectedCity, country = selectedCountry, wakeEvent } = options;
       // Capture values now: a delayed request must not use a newer selection.
       return getBookingQueue().enqueue({
         action, userName, setup_city: city?.name_en || "", setup_city_zh: city?.name_zh || "",
         setup_country: country?.name_en || "", setup_country_zh: country?.name_zh || "",
         ...(press ? { press: "yes" } : {}),
+        ...(wakeEvent ? { wakeEvent } : {}),
       });
     }
 
@@ -1672,8 +1673,31 @@
     }
 
     // --- Spacebar Action on Alarm Screen ---
+    function captureWakeAcknowledgement() {
+      const scheduledAt = dailyAlarm?.snapshot().pendingAt;
+      if (isSimulatingAlarm || !Number.isFinite(scheduledAt)) return undefined;
+      const event = {
+        pressedAt: new Date().toISOString(),
+        scheduledAt: new Date(scheduledAt).toISOString(),
+        clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      };
+      try {
+        const base = JSON.parse(localStorage.getItem("wakeupmap.current-base") || "null");
+        if (Number.isFinite(base?.latitude) && Math.abs(base.latitude) <= 90 &&
+            Number.isFinite(base?.longitude) && Math.abs(base.longitude) <= 180) {
+          event.currentBaseLatitude = base.latitude;
+          event.currentBaseLongitude = base.longitude;
+        }
+      } catch {}
+      return event;
+    }
+
     function handleAlarmStageSpaceKey() {
       if (isAlarmRinging) {
+        // Freeze the physical button time before audio/UI work or network retry.
+        const wakeEvent = captureWakeAcknowledgement();
+        // Persist the outbox before clearing the pending alarm acknowledgement.
+        syncWakeupHereIdentity({ press: true, wakeEvent });
         // First Space press: Stop ringing, keep normal clock running
         isAlarmRinging = false;
         sound.stopAlarmRinging();
@@ -1684,7 +1708,6 @@
         isSimulatingAlarm = false;
         if (simulatedTimer) clearInterval(simulatedTimer);
         simulatedTimer = null;
-        syncWakeupHereIdentity({ press: true });
 
         const statusLabel = document.getElementById("alarm-status-label");
         if (statusLabel) {

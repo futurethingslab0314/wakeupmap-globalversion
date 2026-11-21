@@ -2,6 +2,10 @@
   "functions": {
     "api/wake-up-now.ts": {
       "includeFiles": "cities_data.json"
+    },
+    "api/wakeuphere.ts": {
+      "includeFiles": "cities_data.json",
+      "maxDuration": 60
     }
   },
   "rewrites": [

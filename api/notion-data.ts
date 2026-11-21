@@ -1,3 +1,5 @@
+import { readWakeAcknowledgement } from "../src/wakeAcknowledgement.ts";
+
 const fallbackLocations = [
   {
     id: "1",
@@ -117,7 +119,7 @@ function getFirstAvailableUrl(properties: Record<string, unknown>, keys: string[
   return getFirstAvailableProperty(getUrlProperty, properties, keys);
 }
 
-function normalizePage(page: { id?: string; properties?: Record<string, unknown> }) {
+export function normalizePage(page: { id?: string; properties?: Record<string, unknown> }) {
   const properties = page.properties ?? {};
   const city = getFirstAvailableProperty(getRichTextProperty, properties, ["City", "city"]) ||
     getFirstAvailableProperty(getTitleProperty, properties, ["City", "city"]);
@@ -137,9 +139,11 @@ function normalizePage(page: { id?: string; properties?: Record<string, unknown>
     getDateProperty(properties, "Recorded At") ??
     getDateProperty(properties, "recorded at") ??
     getDateProperty(properties, "Date");
-  const userName = getFirstAvailableTitle(properties, ["userName", "User Name", "Name"]);
+  const userName = getFirstAvailableProperty(getRichTextProperty, properties, ["wakeuphere_user_name"]) ||
+    getFirstAvailableTitle(properties, ["userName", "User Name", "Name"]);
 
   return {
+    ...readWakeAcknowledgement(properties),
     id: page.id ?? userName ?? "",
     userName,
     city,
@@ -184,26 +188,22 @@ export default async function handler(
       return response.status(200).json(fallbackLocations);
     }
 
-    const queryResponse = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Notion-Version": "2022-06-28",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({}),
-    });
+    const pages: Array<{id?: string; properties?: Record<string, unknown>}> = [];
+    let cursor: string | undefined;
+    do {
+      const queryResponse = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Notion-Version": "2022-06-28", "Content-Type": "application/json" },
+        body: JSON.stringify({ page_size: 100, sorts: [{timestamp:"created_time",direction:"descending"}],
+          ...(cursor ? {start_cursor:cursor} : {}) }),
+      });
+      if (!queryResponse.ok) throw new Error(`Notion query failed: ${queryResponse.status}`);
+      const payload = await queryResponse.json() as {results?: typeof pages;has_more?: boolean;next_cursor?: string|null};
+      pages.push(...(payload.results ?? []));
+      cursor = payload.has_more && payload.next_cursor ? payload.next_cursor : undefined;
+    } while (cursor);
 
-    if (!queryResponse.ok) {
-      const errorPayload = await queryResponse.text();
-      throw new Error(`Notion query failed: ${queryResponse.status} ${errorPayload}`);
-    }
-
-    const queryResult = (await queryResponse.json()) as {
-      results: Array<{ id?: string; properties?: Record<string, unknown> }>;
-    };
-
-    const records = queryResult.results
+    const records = pages
       .map((page) => normalizePage(page))
       .filter((record) => record.city);
 

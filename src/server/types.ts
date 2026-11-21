@@ -1,3 +1,5 @@
+import type { WakeAcknowledgementMetadata } from "../wakeAcknowledgement";
+
 export interface CityMappingRecord {
   id: string;
   city: string;
@@ -66,7 +68,7 @@ export interface SelectCityResult {
   evaluatedAtUtc: string;
 }
 
-export interface NormalizedNotionRecord {
+export interface NormalizedNotionRecord extends WakeAcknowledgementMetadata {
   id: string;
   userName?: string;
   city: string;

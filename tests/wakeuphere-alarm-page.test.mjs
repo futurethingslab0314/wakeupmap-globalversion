@@ -135,3 +135,39 @@ test('startup installs a recurring roster refresh and outbox retry', async () =>
   assert([...p.timers.values()].some(timer=>timer.ms===60000));
   assert([...p.timers.values()].some(timer=>timer.ms===15000));
 });
+
+test('real alarm confirmation freezes the actual button time, account and scheduled city for retry',async()=>{
+  const payloads=[];let release;
+  const storage=new Map([['wakeuphere.userName','Pi-02'],['wakeupmap.current-base',JSON.stringify({latitude:25.033,longitude:121.5654})]]);
+  const p=await page(storage,Date.parse('2026-11-16T16:59:59Z'),{fetch:async(url,opts)=>{
+    if(opts.method==='POST'){
+      const value=JSON.parse(opts.body);payloads.push(value);
+      if(value.wakeEvent)await new Promise(resolve=>release=resolve);
+      return {ok:true,json:async()=>({ok:true})};
+    }
+    return {ok:true,json:async()=>({users:[]})};
+  }});
+  p.run('setStage(3)');await p.run('getBookingQueue().flush()');
+  p.time('2026-11-16T17:00:00Z');p.run('pollDailyAlarm()');
+  p.time('2026-11-16T17:03:12.345Z');p.run('handleAlarmStageSpaceKey()');
+  const acknowledgement=payloads.at(-1);
+  assert.equal(acknowledgement.userName,'Pi-02');assert.equal(acknowledgement.setup_city,'Anchorage');
+  assert.equal(acknowledgement.wakeEvent.pressedAt,'2026-11-16T17:03:12.345Z');
+  assert.equal(acknowledgement.wakeEvent.scheduledAt,'2026-11-16T17:00:00.000Z');
+  assert.equal(acknowledgement.wakeEvent.currentBaseLatitude,25.033);
+  assert(JSON.parse(storage.get('wakeuphere.bookingOutbox')).some(job=>job.wakeEvent));
+  p.time('2026-11-16T18:00:00Z');release();await p.run('getBookingQueue().flush()');
+  assert.equal(payloads.at(-1).wakeEvent.pressedAt,'2026-11-16T17:03:12.345Z');
+  p.run('handleAlarmStageSpaceKey()');assert.equal(payloads.filter(job=>job.wakeEvent).length,1);
+});
+
+test('manual simulation acknowledgement does not create a formal awakening event',async()=>{
+  const payloads=[];const p=await page(new Map(),Date.parse('2026-11-16T16:59:59Z'),{fetch:async(url,opts)=>{
+    if(opts.method==='POST')payloads.push(JSON.parse(opts.body));
+    return {ok:true,json:async()=>({ok:true,users:[]})};
+  }});
+  p.run('setStage(3);triggerAlarmSimulation();handleAlarmStageSpaceKey()');
+  await p.run('getBookingQueue().flush()');
+  assert(payloads.some(job=>job.action==='dismiss'));
+  assert(payloads.every(job=>!job.wakeEvent));
+});

@@ -326,7 +326,7 @@ function formatMinutePart(date: Date, timeZone: string): number {
   return Number(parts.find((part) => part.type === "minute")?.value ?? "0");
 }
 
-function captureWakeUpContext(body: WakeUpNowBody): WakeUpContext {
+export function captureWakeUpContext(body: WakeUpNowBody): WakeUpContext {
   const userName = body.userName?.trim();
   if (!userName) {
     throw new Error("userName must not be blank");
@@ -446,7 +446,7 @@ function getTargetLatitude(body: WakeUpNowBody, context: WakeUpContext): number 
   return normalizeLatitudeAfterArc(body.currentBaseLatitude + signedDistance);
 }
 
-function getDistanceBetweenCoordinates(
+export function getDistanceBetweenCoordinates(
   left: { latitude: number; longitude: number },
   right: { latitude: number; longitude: number },
 ): number {
@@ -460,7 +460,8 @@ function getDistanceBetweenCoordinates(
     Math.sin(deltaLatitude / 2) ** 2 +
     Math.cos(leftLatitude) * Math.cos(rightLatitude) * Math.sin(deltaLongitude / 2) ** 2;
 
-  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const clamped = Math.min(1, Math.max(0, a));
+  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(clamped), Math.sqrt(1 - clamped));
 }
 
 function isUsableCity(city: RawWorldCity): boolean {
@@ -485,6 +486,11 @@ function loadRawWorldCities(): RawWorldCity[] {
 }
 
 function loadWorldCities(nowUtcIso: string): WorldCity[] {
+  const offsets = new Map<string, number>();
+  const offset = (zone: string) => {
+    if (!offsets.has(zone)) offsets.set(zone, getUtcOffsetHoursAt(nowUtcIso, zone));
+    return offsets.get(zone)!;
+  };
   return loadRawWorldCities().map((city) => ({
     id: `${slugify(city.country)}-${slugify(city.city)}`,
     city: city.city,
@@ -494,11 +500,11 @@ function loadWorldCities(nowUtcIso: string): WorldCity[] {
     timezone: city.timezone,
     latitude: city.latitude,
     longitude: city.longitude,
-    utcOffset: getUtcOffsetHoursAt(nowUtcIso, city.timezone),
+    utcOffset: offset(city.timezone),
   }));
 }
 
-async function getRecentCityNames(apiKey: string, databaseId: string): Promise<string[]> {
+export async function getRecentCityNames(apiKey: string, databaseId: string): Promise<string[]> {
   const response = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
     method: "POST",
     headers: {
@@ -579,18 +585,23 @@ async function getExistingLocationLabels(
   return null;
 }
 
-function selectCity(nowUtcIso: string, recentCityNames: string[], body: WakeUpNowBody, context: WakeUpContext): WorldCity {
+export function selectCity(nowUtcIso: string, recentCityNames: string[], body: WakeUpNowBody, context: WakeUpContext): WorldCity {
   const recent = new Set(recentCityNames.map((city) => city.toLowerCase()));
   const cities = loadWorldCities(nowUtcIso);
   const targetLatitude = getTargetLatitude(body, context);
+  const differences = new Map<string, number>();
+  const difference = (zone: string) => {
+    if (!differences.has(zone)) differences.set(zone, getMinuteDiffToEight(nowUtcIso, zone));
+    return differences.get(zone)!;
+  };
 
   const ranked = cities
     .map((city) => ({
       city,
-      minuteDiffToEight: getMinuteDiffToEight(nowUtcIso, city.timezone),
+      minuteDiffToEight: difference(city.timezone),
       isRecent: recent.has(city.city.toLowerCase()),
       latitudeDiffFromTarget: targetLatitude === null ? Infinity : Math.abs(city.latitude - targetLatitude),
-      timeBand: getMinuteTimeBand(getMinuteDiffToEight(nowUtcIso, city.timezone)),
+      timeBand: getMinuteTimeBand(difference(city.timezone)),
     }))
     .sort((left, right) => {
       if (left.timeBand !== right.timeBand) {

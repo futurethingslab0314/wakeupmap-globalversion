@@ -1,3 +1,5 @@
+import { recordWakeAcknowledgement } from "../src/server/services/wakeuphereAcknowledgement.ts";
+
 type NotionPropertyDefinition = {
   type?: string;
   name?: string;
@@ -278,8 +280,18 @@ export default async function handler(
     }
     const current = records.find(r => normalizeKey(r.userName) === normalizeKey(user));
     const sameLocation = current && matchesLocation(current, city, cityZh, country, countryZh);
+    let wakeRecordId: string | undefined;
+    if (action === "dismiss" && body.wakeEvent) {
+      const mapDatabaseId = process.env.NOTION_DATABASE_ID;
+      if (!mapDatabaseId) throw new Error("Missing WakeUp Map NOTION_DATABASE_ID");
+      const wakeRecord = await recordWakeAcknowledgement({
+        userName: user, setup_city: city, setup_city_zh: cityZh,
+        setup_country: country, setup_country_zh: countryZh, wakeEvent: body.wakeEvent,
+      }, { apiKey, databaseId: mapDatabaseId });
+      wakeRecordId = wakeRecord.id;
+    }
     if (action !== "reserve" && (!current || !sameLocation || (action === "dismiss" && !current.active))) {
-      return response.status(200).json({ ok: true, ignored: true, action });
+      return response.status(200).json({ ok: true, ignored: true, action, ...(wakeRecordId ? { wakeRecordId } : {}) });
     }
     if (action !== "dismiss") {
       await ensureBookingSchema(databaseId, apiKey, schema, action === "reserve" && Boolean(country));
@@ -311,6 +323,7 @@ export default async function handler(
     });
     if (!result.ok) throw new Error(`Notion booking update failed: ${result.status}`);
     return response.status(200).json({ ok: true, action, created: !id, userName: user, active: action !== "cancel",
+      ...(wakeRecordId ? { wakeRecordId } : {}),
       setup_city: action === "reserve" ? city : current?.city, ...(action === "dismiss" ? { press: "yes" } : {}) });
   } catch (error) {
     return response.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
