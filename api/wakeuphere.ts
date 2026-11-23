@@ -1,5 +1,7 @@
+import { createWakeRoundStore } from "../src/server/services/wakeRoundStore.js";
+import { getLocalDate, getScheduledMorning } from "../src/reservationMap.js";
 import { getMapReservations } from "../src/server/services/wakeuphereMapBookings.js";
-import { recordWakeAcknowledgement } from "../src/server/services/wakeuphereAcknowledgement.js";
+import { findWakeAcknowledgementPage, recordWakeAcknowledgement, wakeRoundId } from "../src/server/services/wakeuphereAcknowledgement.js";
 
 type NotionPropertyDefinition = {
   type?: string;
@@ -236,7 +238,33 @@ export default async function handler(
     }
     const apiKey = process.env.NOTION_API_KEY;
     const databaseId = process.env.WAKEUPHERE_PAGE_ID;
+    if (request.method === "POST" && request.body?.action === "wake-map" && !databaseId) {
+      return response.status(200).json({ ok: true, hasReservation: false });
+    }
     if (!apiKey || !databaseId) return response.status(500).json({ error: "Missing NOTION_API_KEY or WAKEUPHERE_PAGE_ID" });
+    const query = pickRequestQuery(request);
+    const isRoundRead = request.method === "GET" && query.get("view") === "wake-round";
+    const isRingingUpdate = request.method === "POST" && request.body?.action === "alarm-ringing";
+    if (isRoundRead || isRingingUpdate) {
+      const get = (name: string) => String((isRoundRead ? query.get(name) : request.body?.[name]) || "");
+      const user = get("userName"), city = get("city"), country = get("country");
+      const scheduled = new Date(get("scheduledAt"));
+      const mapDatabaseId = process.env.NOTION_DATABASE_ID;
+      if (!mapDatabaseId) throw Error("Missing WakeUp Map NOTION_DATABASE_ID");
+      if (!normalizeKey(user) || !city || !country || !Number.isFinite(scheduled.getTime())) {
+        return response.status(400).json({ error: "Missing wake round identity" });
+      }
+      const store = createWakeRoundStore(mapDatabaseId);
+      if (isRingingUpdate) {
+        if (scheduled.getTime() > Date.now()) return response.status(400).json({ error: "Alarm is not due" });
+        await store.publishRinging(JSON.stringify([normalizeKey(user), city, country]), scheduled.toISOString());
+        return response.status(200).json({ ok: true });
+      }
+      const id = wakeRoundId(user, city, country, scheduled);
+      const claim = await store.getClaim(id);
+      const confirmed = Boolean(claim && await findWakeAcknowledgementPage(id, { apiKey, databaseId: mapDatabaseId }));
+      return response.status(200).json({ confirmed, pending: Boolean(claim) && !confirmed });
+    }
     const database = await loadDatabase(databaseId, apiKey);
     const schema = database.properties ?? {};
     const userField = textField(schema, ["userName", "user name", "name"]);
@@ -249,7 +277,6 @@ export default async function handler(
     const records = latestBookings(await loadAllPages(databaseId, apiKey), schema);
 
     if (request.method === "GET") {
-      const query = pickRequestQuery(request);
       if (query.get("view") === "map") {
         return response.status(200).json({ reservations: getMapReservations(records), refreshedAt: new Date().toISOString() });
       }
@@ -278,6 +305,35 @@ export default async function handler(
     const read = (name: string) => typeof body[name] === "string" ? (body[name] as string).trim() : "";
     const city = read("setup_city"), cityZh = read("setup_city_zh");
     const country = read("setup_country"), countryZh = read("setup_country_zh");
+    if (action === "wake-map") {
+      if (!normalizeKey(user)) return response.status(400).json({ error: "Missing userName" });
+      const booking = records.find(record => record.active && normalizeKey(record.userName) === normalizeKey(user));
+      if (!booking) return response.status(200).json({ ok: true, hasReservation: false });
+      const pressed = new Date(read("clientIsoTime"));
+      if (!Number.isFinite(pressed.getTime())) return response.status(400).json({ error: "Invalid wake time" });
+      // Looking one day ahead also includes reservations made after today's 08:00.
+      const [reservation] = getMapReservations([booking], new Date(pressed.getTime() + 86_400_000));
+      if (!reservation) throw Error("The active reservation could not be resolved");
+      const today = getScheduledMorning(pressed, reservation.timeZone);
+      let scheduledAt = booking.updatedAt <= Date.parse(today) ? today : reservation.scheduledAt;
+      const mapDatabaseId = process.env.NOTION_DATABASE_ID;
+      if (!mapDatabaseId) throw Error("Missing WakeUp Map NOTION_DATABASE_ID");
+      const store = createWakeRoundStore(mapDatabaseId);
+      const ringing = await store.getRinging(JSON.stringify([normalizeKey(user), reservation.city, reservation.country]));
+      if (ringing && ringing.getTime() >= booking.updatedAt && ringing <= pressed && ringing.toISOString() < scheduledAt &&
+          getScheduledMorning(ringing, reservation.timeZone) === ringing.toISOString()) {
+        const claim = await store.getClaim(wakeRoundId(user, reservation.city, reservation.country, ringing));
+        if (!claim || (claim.modifiedAt && getLocalDate(claim.modifiedAt, reservation.timeZone) >=
+            getLocalDate(pressed, reservation.timeZone))) {
+          scheduledAt = ringing.toISOString();
+        }
+      }
+      const result = await recordWakeAcknowledgement({
+        userName: user, setup_city: reservation.city, setup_country: reservation.country,
+        wakeEvent: { ...body, pressedAt: pressed.toISOString(), scheduledAt },
+      }, { apiKey, databaseId: mapDatabaseId, allowEarly: true, roundStore: store });
+      return response.status(result.id ? 200 : 202).json({ ok: true, hasReservation: true, wakeRecordId: result.id, record: result.record });
+    }
     if (!user || !["reserve", "cancel", "dismiss"].includes(String(action)) ||
         (action === "reserve" && !(city || cityZh))) {
       return response.status(400).json({ error: "Valid userName, action and reservation city are required" });
@@ -291,7 +347,8 @@ export default async function handler(
       const wakeRecord = await recordWakeAcknowledgement({
         userName: user, setup_city: city, setup_city_zh: cityZh,
         setup_country: country, setup_country_zh: countryZh, wakeEvent: body.wakeEvent,
-      }, { apiKey, databaseId: mapDatabaseId });
+      }, { apiKey, databaseId: mapDatabaseId, roundStore: createWakeRoundStore(mapDatabaseId) });
+      if (!wakeRecord.id) return response.status(202).json({ ok: true, action, pending: true });
       wakeRecordId = wakeRecord.id;
     }
     if (action !== "reserve" && (!current || !sameLocation || (action === "dismiss" && !current.active))) {

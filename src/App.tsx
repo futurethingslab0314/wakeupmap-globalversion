@@ -383,24 +383,50 @@ export default function App() {
     setError(null);
 
     try {
-      const response = await fetch("/api/wake-up-now", {
+      const wakeInput = {
+        language,
+        userName: trimmedUserName,
+        clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        clientIsoTime: new Date().toISOString(),
+        ...(currentBase ? {
+          currentBaseLatitude: currentBase.latitude,
+          currentBaseLongitude: currentBase.longitude,
+        } : {}),
+      };
+      const postWake = (url: string, body: object) => fetch(url, {
         method: "POST",
         cache: "no-store",
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-        },
-        body: JSON.stringify({
-          language,
-          userName: trimmedUserName,
-          clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          clientIsoTime: new Date().toISOString(),
-          ...(currentBase ? {
-            currentBaseLatitude: currentBase.latitude,
-            currentBaseLongitude: currentBase.longitude,
-          } : {}),
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
+      const confirmRound = () => postWake("/api/wakeuphere", { ...wakeInput, action: "wake-map" });
+      let sharedResponse = await confirmRound();
+      for (let attempt = 0; sharedResponse.status === 202 && attempt < 4; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 700));
+        sharedResponse = await confirmRound();
+      }
+      const shared = await sharedResponse.json() as {
+        ok?: boolean; error?: string; hasReservation?: boolean; wakeRecordId?: string; record?: NotionRecord;
+      };
+      if (!sharedResponse.ok || !shared.ok) throw Error(shared.error || text.connectionError);
+      if (shared.hasReservation) {
+        const { record } = shared;
+        if (record) {
+          setSelectedRecord(record);
+          setRecords(current => [record, ...current.filter(item => item.id !== record.id)]);
+          setPendingBreakfastRecords(null);
+          setReadyBreakfastRecordId(null);
+        }
+        if (!record) void fetchData({ showLoading: false }).catch(console.error);
+        if (shared.wakeRecordId) {
+          void ensureAwakeningContent(shared.wakeRecordId, { onTextReady: () => fetchData({ showLoading: false }) })
+            .then(() => fetchData({ showLoading: false }))
+            .catch(error => console.error("Awakening content generation failed:", error));
+        }
+        soundService.playSuccess();
+        return;
+      }
+      const response = await postWake("/api/wake-up-now", wakeInput);
 
       const rawResponse = await response.text();
       let payload: WakeUpNowResponse | null = null;

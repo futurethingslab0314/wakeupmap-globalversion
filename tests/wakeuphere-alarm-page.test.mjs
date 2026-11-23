@@ -25,7 +25,7 @@ async function page(storage = new Map(), time = Date.parse('2026-11-16T16:59:59Z
     constructor(...args) { super(...(args.length ? args : [now])); }
     static now() { return now; }
   }
-  const ctx = vm.createContext({ Intl, Date: Clock, URL, AbortSignal,
+  const ctx = vm.createContext({ Intl, Date: Clock, URL, URLSearchParams, AbortSignal,
     console: { log() {}, warn() {}, error(...args) { throw new Error(args.join(' ')); } },
     localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k,v) => storage.set(k,v), removeItem: k => storage.delete(k) },
     sessionStorage: { getItem: () => null, removeItem() {}, setItem() {} },
@@ -57,27 +57,28 @@ test('real page arms at city selection, rings at local 08:00 and joystick Space 
   p.run('setStage(3)'); assert.equal(p.starts(), 0);
   assert(p.elements.get('alarm-schedule-label').textContent.includes('08:00'));
   assert.equal(JSON.parse(p.storage.get('wakeuphere.dailyAlarm')).schedule.nextAt, Date.parse('2026-11-16T17:00:00Z'));
-  p.time('2026-11-16T17:00:00Z'); p.run('pollDailyAlarm()'); assert.equal(p.starts(),1);
-  p.run('pollDailyAlarm()'); assert.equal(p.starts(),1);
+  p.time('2026-11-16T17:00:00Z'); await p.run('pollDailyAlarm()'); assert.equal(p.starts(),1);
+  await p.run('pollDailyAlarm()'); assert.equal(p.starts(),1);
   p.run('handleAlarmStageSpaceKey()'); assert.equal(p.stops(),1);
   assert.equal(p.run('isAlarmRinging'), false);
   assert.equal(JSON.parse(p.storage.get('wakeuphere.dailyAlarm')).schedule.pendingAt, null);
   const restored = await page(p.storage, Date.parse('2026-11-16T17:01:00Z'));
   assert.equal(restored.run('restoreSelectionAfterUpdate()'),true);
   assert.equal(restored.starts(),0);
-  restored.time('2026-11-17T17:00:00Z'); restored.run('pollDailyAlarm()'); assert.equal(restored.starts(),1);
+  restored.time('2026-11-17T17:00:00Z'); await restored.run('pollDailyAlarm()'); assert.equal(restored.starts(),1);
 });
 
 test('restart restores an unacknowledged ringing alarm; reset cancels it', async () => {
   const p = await page(); p.run('setStage(3)');
-  p.time('2026-11-16T17:00:00Z'); p.run('pollDailyAlarm()');
+  p.time('2026-11-16T17:00:00Z'); await p.run('pollDailyAlarm()');
   const restored = await page(p.storage, Date.parse('2026-11-16T17:02:00Z'));
   assert.equal(restored.run('restoreSelectionAfterUpdate()'),true);
+  await settle();
   assert.equal(restored.starts(),1);
   restored.run('resetAlarm()');
   assert.equal(restored.storage.has('wakeuphere.dailyAlarm'), false);
   assert.equal(restored.run('dailyAlarm'), null);
-  restored.time('2026-11-17T17:00:00Z'); restored.run('pollDailyAlarm()'); assert.equal(restored.starts(),1);
+  restored.time('2026-11-17T17:00:00Z'); await restored.run('pollDailyAlarm()'); assert.equal(restored.starts(),1);
 });
 
 test('manual demo does not consume or cancel the scheduled alarm', async () => {
@@ -85,7 +86,7 @@ test('manual demo does not consume or cancel the scheduled alarm', async () => {
   assert.equal(p.starts(),1);
   p.run('handleAlarmStageSpaceKey()');
   assert.equal(p.run('dailyAlarm.snapshot().nextAt'),Date.parse('2026-11-16T17:00:00Z'));
-  p.time('2026-11-16T17:00:00Z'); p.run('pollDailyAlarm()'); assert.equal(p.starts(),2);
+  p.time('2026-11-16T17:00:00Z'); await p.run('pollDailyAlarm()'); assert.equal(p.starts(),2);
 });
 
 test('choosing after 08:00 does not immediately fire; changing user does not inherit an alarm', async () => {
@@ -149,7 +150,7 @@ test('real alarm confirmation freezes the actual button time, account and schedu
     return {ok:true,json:async()=>({users:[]})};
   }});
   p.run('setStage(3)');await p.run('getBookingQueue().flush()');
-  p.time('2026-11-16T17:00:00Z');p.run('pollDailyAlarm()');
+  p.time('2026-11-16T17:00:00Z');await p.run('pollDailyAlarm()');
   p.time('2026-11-16T17:03:12.345Z');p.run('handleAlarmStageSpaceKey()');
   const acknowledgement=payloads.at(-1);
   assert.equal(acknowledgement.userName,'Pi-02');assert.equal(acknowledgement.setup_city,'Anchorage');
@@ -182,7 +183,7 @@ test('real acknowledgement automatically starts durable content generation witho
    if(url==='/api/wake-up-image'){await new Promise(resolve=>releaseImage=resolve);return {ok:true,json:async()=>({ok:true})};}
    return {ok:true,json:async()=>({ok:true,...(body.wakeEvent?{wakeRecordId:'wake-auto'}:{})})};
  }});
- p.run('setStage(3)');await p.run('getBookingQueue().flush()');p.time('2026-11-16T17:00:00Z');p.run('pollDailyAlarm();handleAlarmStageSpaceKey()');
+ p.run('setStage(3)');await p.run('getBookingQueue().flush()');p.time('2026-11-16T17:00:00Z');await p.run('pollDailyAlarm()');p.run('handleAlarmStageSpaceKey()');
  assert.equal(p.stops(),1);assert.equal(p.run('isAlarmRinging'),false);
  assert.equal(await p.run('getBookingQueue().flush()'),true);await settle();
  assert(calls.some(call=>call.url==='/api/wake-up-now'&&call.body.pageId==='wake-auto'));
@@ -221,6 +222,33 @@ test('browser deployment reload is deferred while content generation is in fligh
  p.run('releaseContent()');await p.run('getContentQueue().flush()');assert.equal(p.ctx.updateOptions.canUpdate(),true);
 });
 
+test('remote acknowledgement skips the scheduled round and stops a ringing round without writing from the Pi', async () => {
+  const confirmed = new Set(['2026-11-16T17:00:00.000Z']);
+  const posts = [];
+  const p = await page(new Map(), Date.parse('2026-11-16T16:59:59Z'), {
+    fetch: async (url, opts = {}) => {
+      if (opts.method === 'POST') {
+        posts.push(JSON.parse(opts.body));
+        return { ok: true, json: async () => ({ ok: true }) };
+      }
+      const query = new URL(url, 'https://example.test').searchParams;
+      return { ok: true, json: async () => ({ users: [], confirmed: confirmed.has(query.get('scheduledAt')) }) };
+    },
+  });
+  p.run('setStage(3)');
+  p.time('2026-11-16T17:00:00Z');
+  await p.run('pollDailyAlarm()');
+  assert.equal(p.starts(), 0);
+  assert.equal(p.run('dailyAlarm.snapshot().nextAt'), Date.parse('2026-11-17T17:00:00Z'));
+  p.time('2026-11-17T17:00:00Z');
+  await p.run('pollDailyAlarm()');
+  assert.equal(p.starts(), 1);
+  confirmed.add('2026-11-17T17:00:00.000Z');
+  await p.run('pollDailyAlarm()');
+  assert.equal(p.stops(), 1);
+  assert.equal(p.run('dailyAlarm.snapshot().pendingAt'), null);
+  assert.equal(posts.some(post => post.wakeEvent), false);
+});
 
 test('real alarm page routes speech, preserves acknowledgement, and cancels delayed second announcement', async () => {
   const p = await page();

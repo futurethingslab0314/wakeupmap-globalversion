@@ -92,25 +92,161 @@ test('a new scheduled day gets a new record while retries of that day remain ded
   });
 });
 
-test('dismiss API writes the awakening to the main map database and returns its record ID',async()=>{
-  await withNotion(async state=>{
-    const nextFetch=globalThis.fetch;
-    globalThis.fetch=(async(url,opts:any={})=>{
-      if(String(url).endsWith('/databases/booking-db'))return Response.json({properties:{userName:{type:'title'},setup_city:{type:'rich_text'}}});
-      if(String(url).endsWith('/databases/booking-db/query'))return Response.json({results:[],has_more:false});
-      return nextFetch(url,opts);
-    }) as typeof fetch;
-    const before={NOTION_API_KEY:process.env.NOTION_API_KEY,NOTION_DATABASE_ID:process.env.NOTION_DATABASE_ID,WAKEUPHERE_PAGE_ID:process.env.WAKEUPHERE_PAGE_ID};
-    Object.assign(process.env,{NOTION_API_KEY:'fixture',NOTION_DATABASE_ID:'map-db',WAKEUPHERE_PAGE_ID:'booking-db'});
-    try{
-      let status=200,data:any;
-      await bookingHandler({method:'POST',body:{...body,action:'dismiss',press:'yes'}},{status(code){status=code;return this},json(value){data=value},setHeader(){}});
-      assert.equal(status,200);assert.equal(data.wakeRecordId,'wake-1');assert.equal(state.writes.length,1);
-      await mapHandler({method:'GET'},{status(code){status=code;return this},json(value){data=value},setHeader(){}});
-      assert.equal(status,200);assert.equal(data[0].id,'wake-1');assert.equal(data[0].userName,'YuPie');
-      assert.equal(data[0].wakePressedAt,body.wakeEvent.pressedAt);
-    }finally{
-      for(const [key,value] of Object.entries(before))if(value===undefined)delete process.env[key];else process.env[key]=value;
+function mockSharedAwakeningApi(options: { reserved?: boolean; bookedAt?: string } = {}) {
+  const env = {
+    NOTION_API_KEY: 'fixture', NOTION_DATABASE_ID: 'map-db', WAKEUPHERE_PAGE_ID: 'booking-db',
+    CLOUDFLARE_R2_ENDPOINT: 'https://storage.example.test', CLOUDFLARE_R2_BUCKET: 'wake',
+    CLOUDFLARE_R2_ACCESS_KEY_ID: 'fixture', CLOUDFLARE_R2_SECRET_ACCESS_KEY: 'fixture-secret',
+  };
+  const before = Object.fromEntries(Object.keys(env).map(key => [key, process.env[key]]));
+  Object.assign(process.env, env);
+
+  const nextFetch = globalThis.fetch;
+  const objects = new Map<string, string>();
+  globalThis.fetch = (async (url, opts: RequestInit = {}) => {
+    const address = String(url);
+    if (address.startsWith(env.CLOUDFLARE_R2_ENDPOINT)) {
+      const headers = new Headers(opts.headers);
+      if (opts.method === 'PUT') {
+        if (headers.get('if-none-match') === '*' && objects.has(address)) return new Response(null, { status: 412 });
+        objects.set(address, String(opts.body));
+        return new Response(null, { status: 200 });
+      }
+      if (opts.method === 'DELETE') {
+        objects.delete(address);
+        return new Response(null, { status: 204 });
+      }
+      if (!objects.has(address)) return new Response(null, { status: 404 });
+      return new Response(opts.method === 'HEAD' ? null : objects.get(address));
     }
+    if (address.endsWith('/databases/booking-db')) return Response.json({
+      properties: { userName: { type: 'title' }, setup_city: { type: 'rich_text' }, setup_country: { type: 'rich_text' } },
+    });
+    if (address.endsWith('/databases/booking-db/query')) {
+      const richText = (value: string) => ({ rich_text: [{ plain_text: value }] });
+      return Response.json({ results: options.reserved ? [{
+        id: 'reservation', properties: {
+          userName: { title: [{ plain_text: 'YuPie' }] },
+          setup_city: richText('Anchorage'), setup_country: richText('United States'),
+          wakeuphere_active: { checkbox: true }, wakeuphere_updated_at: { date: { start: options.bookedAt ?? '2026-03-27T15:00:00Z' } },
+        },
+      }] : [], has_more: false });
+    }
+    if (address.endsWith('/pages/reservation') && opts.method === 'PATCH') return Response.json({ id: 'reservation' });
+    return nextFetch(url, opts);
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = nextFetch;
+    for (const [key, value] of Object.entries(before)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  };
+}
+
+async function callHandler(handler: typeof bookingHandler, request: Parameters<typeof bookingHandler>[0]) {
+  let status = 200;
+  let data: any;
+  await handler(request, { status(code) { status = code; return this; }, json(value) { data = value; }, setHeader() {} });
+  return { status, data };
+}
+
+const pressMap = (clientIsoTime: string, userName = 'yu-pie') => callHandler(bookingHandler, {
+  method: 'POST', body: { action: 'wake-map', userName, clientIsoTime, clientTimeZone: 'Asia/Taipei' },
+});
+const pressHere = () => callHandler(bookingHandler, { method: 'POST', body: { ...body, action: 'dismiss', press: 'yes' } });
+const checkRound = (scheduledAt: string) => {
+  const query = new URLSearchParams({
+    view: 'wake-round', userName: body.userName, city: body.setup_city, country: body.setup_country, scheduledAt,
+  });
+  return callHandler(bookingHandler, { method: 'GET', url: '/api/wakeuphere?' + query });
+};
+
+test('dismiss API writes the awakening to the main map database and returns its record ID', async () => {
+  await withNotion(async state => {
+    const restore = mockSharedAwakeningApi();
+    try {
+      const { status, data } = await pressHere();
+      assert.equal(status, 200);
+      assert.equal(data.wakeRecordId, 'wake-1');
+      assert.equal(state.writes.length, 1);
+      const mapped = await callHandler(mapHandler, { method: 'GET' });
+      assert.equal(mapped.status, 200);
+      assert.equal(mapped.data[0].id, 'wake-1');
+      assert.equal(mapped.data[0].userName, 'YuPie');
+      assert.equal(mapped.data[0].wakePressedAt, body.wakeEvent.pressedAt);
+    } finally { restore(); }
+  });
+});
+
+test('same-account Map skips only the booked round and preserves the first press when Here retries', async () => {
+  await withNotion(async state => {
+    const restore = mockSharedAwakeningApi({ reserved: true });
+    try {
+      const earlyTime = '2026-03-28T15:00:00.000Z';
+      const first = await pressMap(earlyTime);
+      assert.equal(first.status, 200);
+      assert.equal(first.data.record.wakeDelaySeconds, -3600);
+      assert.equal(first.data.record.wakePressedAt, earlyTime);
+      assert.equal((await checkRound(body.wakeEvent.scheduledAt)).data.confirmed, true);
+      assert.equal((await checkRound('2026-03-29T16:00:00.000Z')).data.confirmed, false);
+      assert.equal((await pressHere()).data.wakeRecordId, first.data.wakeRecordId);
+      assert.equal(state.writes.length, 1);
+    } finally { restore(); }
+  });
+});
+
+test('concurrent Map and Here presses produce one Notion record for the ringing alarm', async () => {
+  await withNotion(async state => {
+    const restore = mockSharedAwakeningApi({ reserved: true });
+    try {
+      const results = await Promise.all([pressMap(body.wakeEvent.pressedAt), pressHere(), pressMap(body.wakeEvent.pressedAt)]);
+      assert(results.every(result => [200, 202].includes(result.status)));
+      assert.equal(state.writes.length, 1);
+      assert.equal((await checkRound(body.wakeEvent.scheduledAt)).data.confirmed, true);
+      assert.equal((await pressMap(body.wakeEvent.pressedAt)).data.wakeRecordId, 'wake-1');
+      assert.equal(state.writes.length, 1);
+    } finally { restore(); }
+  });
+});
+
+test('reservation after 08:00 skips its first alarm the following morning', async () => {
+  await withNotion(async () => {
+    const restore = mockSharedAwakeningApi({ reserved: true, bookedAt: '2026-03-28T16:01:00Z' });
+    try {
+      const result = await pressMap('2026-03-28T16:02:00Z');
+      assert.equal(result.status, 200);
+      assert.equal(result.data.record.wakeScheduledAt, '2026-03-29T16:00:00.000Z');
+    } finally { restore(); }
+  });
+});
+
+test('Map with another account uses the standalone wake flow', async () => {
+  await withNotion(async state => {
+    const restore = mockSharedAwakeningApi({ reserved: true });
+    try {
+      const result = await pressMap(body.wakeEvent.pressedAt, 'someone else');
+      assert.equal(result.status, 200);
+      assert.equal(result.data.hasReservation, false);
+      assert.equal(state.writes.length, 0);
+    } finally { restore(); }
+  });
+});
+
+test('Map acknowledges a round that is still ringing after city-local midnight', async () => {
+  await withNotion(async state => {
+    const restore = mockSharedAwakeningApi({ reserved: true });
+    try {
+      const { status } = await callHandler(bookingHandler, {
+        method: 'POST', body: { action: 'alarm-ringing', userName: body.userName,
+          city: body.setup_city, country: body.setup_country, scheduledAt: body.wakeEvent.scheduledAt },
+      });
+      assert.equal(status, 200);
+      const result = await pressMap('2026-03-29T09:00:00.000Z');
+      assert.equal(result.status, 200);
+      assert.equal(result.data.record.wakeScheduledAt, body.wakeEvent.scheduledAt);
+      assert.equal((await checkRound(body.wakeEvent.scheduledAt)).data.confirmed, true);
+      assert.equal(state.writes.length, 1);
+    } finally { restore(); }
   });
 });

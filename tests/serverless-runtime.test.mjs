@@ -9,7 +9,7 @@ import {pathToFileURL} from 'node:url';
 // Exercise emitted JS with Node's production ESM loader, without tsx resolving source extensions.
 test('compiled serverless API entrypoints load and handle requests without a TypeScript loader', async () => {
  const root=await mkdtemp(join(tmpdir(),'wakeup-serverless-test-'));
- const files=['api/notion-data.ts','api/wakeuphere.ts','api/wake-up-now.ts','api/wake-up-image.ts','src/wakeAcknowledgement.ts','src/server/services/wakeuphereAcknowledgement.ts','src/reservationMap.ts','src/server/services/wakeuphereMapBookings.ts'];
+ const files=['api/notion-data.ts','api/wakeuphere.ts','api/wake-up-now.ts','api/wake-up-image.ts','src/wakeAcknowledgement.ts','src/server/services/wakeuphereAcknowledgement.ts','src/reservationMap.ts','src/server/services/wakeuphereMapBookings.ts','src/server/services/wakeRoundStore.ts'];
  try {
   await writeFile(join(root,'package.json'),'{"type":"module"}');
   await cp('cities_data.json',join(root,'cities_data.json'));

@@ -1,9 +1,10 @@
+import { normalizePage } from '../../../api/notion-data.js';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { captureWakeUpContext, getDistanceBetweenCoordinates, getRecentCityNames, selectCity } from '../../../api/wake-up-now.js';
 
 type Schema = Record<string, { type?: string }>;
-type Input = { userName: string; setup_city?: string; setup_city_zh?: string; setup_country?: string; setup_country_zh?: string; wakeEvent: unknown };
+export type WakeAcknowledgementInput = { userName: string; setup_city?: string; setup_city_zh?: string; setup_country?: string; setup_country_zh?: string; wakeEvent: unknown };
 type RawCity = { city: string; city_zh?: string; country: string; country_zh?: string; latitude: number; longitude: number; timezone: string };
 let rawCities: RawCity[] | undefined;
 const normalize = (value: string) => value.trim().toLowerCase().replace(/[\s_-]+/g, '');
@@ -18,7 +19,29 @@ const metadata: Record<string, string> = {
   wakeuphere_distance_km: 'number', wakeuphere_delay_seconds: 'number',
 };
 
-export async function recordWakeAcknowledgement(input: Input, config: { apiKey: string; databaseId: string }) {
+export function wakeRoundId(userName: string, city: string, country: string, scheduled: Date) {
+  return createHash('sha256').update(JSON.stringify([
+    normalize(userName), city, country, scheduled.toISOString(),
+  ])).digest('hex');
+}
+
+export async function findWakeAcknowledgementPage(eventId: string, config: { apiKey: string; databaseId: string }) {
+  const response = await fetch(`https://api.notion.com/v1/databases/${config.databaseId}/query`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${config.apiKey}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ page_size: 1, filter: { property: 'wakeuphere_event_id', rich_text: { equals: eventId } } }),
+  });
+  if (!response.ok) throw Error(`Wake record lookup failed (${response.status})`);
+  const { results } = await response.json();
+  return results?.[0] as { id: string; properties?: Record<string, unknown> } | undefined;
+}
+
+type RoundStore = Pick<ReturnType<typeof import('./wakeRoundStore.js').createWakeRoundStore>, 'claim' | 'release'>;
+
+export async function recordWakeAcknowledgement(
+  input: WakeAcknowledgementInput,
+  config: { apiKey: string; databaseId: string; roundStore?: RoundStore; allowEarly?: boolean },
+) {
   const event = input.wakeEvent as Record<string, unknown> | null;
   if (!input.userName.trim() || !event || typeof event !== 'object') throw Error('Invalid wake acknowledgement');
   const parseTime = (value: unknown) => {
@@ -27,7 +50,7 @@ export async function recordWakeAcknowledgement(input: Input, config: { apiKey: 
     return new Date(value);
   };
   const pressed = parseTime(event.pressedAt), scheduled = parseTime(event.scheduledAt);
-  if (pressed < scheduled) throw Error('Wake acknowledgement cannot precede the alarm');
+  if (!config.allowEarly && pressed < scheduled) throw Error('Wake acknowledgement cannot precede the alarm');
   if (typeof event.clientTimeZone !== 'string') throw Error('Missing wake acknowledgement timezone');
   new Intl.DateTimeFormat('en', { timeZone: event.clientTimeZone }).format(pressed);
   if (!rawCities) rawCities = JSON.parse(readFileSync(new URL('../../../cities_data.json', import.meta.url), 'utf8'));
@@ -42,9 +65,8 @@ export async function recordWakeAcknowledgement(input: Input, config: { apiKey: 
   }).format(scheduled);
   if (scheduledParts !== '08:00:00' || scheduled.getUTCMilliseconds() !== 0)
     throw Error('Wake event must refer to the city-local 08:00 alarm');
-  const eventId = createHash('sha256').update(JSON.stringify([
-    normalize(input.userName), target.city, target.country, scheduled.toISOString(),
-  ])).digest('hex');
+  const eventId = wakeRoundId(input.userName, target.city, target.country, scheduled);
+  const early = pressed < scheduled;
   const headers = { Authorization: `Bearer ${config.apiKey}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' };
   const request = async (path: string, method = 'GET', body?: unknown) => {
     const response = await fetch('https://api.notion.com/v1/' + path, {
@@ -80,10 +102,12 @@ export async function recordWakeAcknowledgement(input: Input, config: { apiKey: 
     await request('databases/' + config.databaseId, 'PATCH', { properties: additions });
     for (const [key, definition] of Object.entries(additions)) schema[key] = { type: Object.keys(definition as object)[0] };
   }
-  const existing = await request(`databases/${config.databaseId}/query`, 'POST', {
-    page_size: 1, filter: { property: 'wakeuphere_event_id', rich_text: { equals: eventId } },
-  });
-  if (existing.results?.[0]?.id) return { id: existing.results[0].id, existing: true };
+  const findExisting = async () => {
+    const page = await findWakeAcknowledgementPage(eventId, config);
+    return page?.id ? { id: page.id, record: normalizePage(page), existing: true } : undefined;
+  };
+  const existing = await findExisting();
+  if (existing) return existing;
 
   const base: { currentBaseLatitude?: number; currentBaseLongitude?: number } = {};
   if (event.currentBaseLatitude !== undefined || event.currentBaseLongitude !== undefined) {
@@ -115,8 +139,8 @@ export async function recordWakeAcknowledgement(input: Input, config: { apiKey: 
     city: city.city, city_zh: city.cityZh, country: city.country, country_zh: city.countryZh,
     latitude: city.latitude, longitude: city.longitude, recordedAtDate: context.recordedAtDate,
     recordedAt: context.recordedAt, timezone: event.clientTimeZone, greeting: 'AWAKE // 已醒來',
-    story: 'WakeUpHere alarm acknowledged. The wake city is selected by WakeUp Map at the button-press time; it is not GPS location.',
-    story_zh: '已按下 WakeUpHere 鬧鐘確認鍵。醒來城市依按鈕時間套用 WakeUp Map 選址規則，並非 GPS 實際所在地。',
+    story: early ? 'Awoke before the scheduled alarm.' : 'Scheduled alarm acknowledged.',
+    story_zh: early ? '已提前醒來，跳過本輪鬧鐘。' : '已確認醒來，停止本輪鬧鐘。',
   };
   for (const [key,type,aliases] of standard) {
     const name = find(type,aliases)!;
@@ -125,7 +149,19 @@ export async function recordWakeAcknowledgement(input: Input, config: { apiKey: 
   }
   const offsetField = find('number',['utc offset','utcOffset']);
   if (offsetField) properties[offsetField] = { number: city.utcOffset };
-  const created = await request('pages', 'POST', { parent: { database_id: config.databaseId }, properties });
+  const store = config.roundStore;
+  if (store && !await store.claim(eventId)) return await findExisting() ?? { id: undefined, record: undefined, existing: true };
+
+  // A lost response or server error can still mean Notion created the page.
+  // Keep the claim in that case so a retry cannot create a second page.
+  const response = await fetch('https://api.notion.com/v1/pages', {
+    method: 'POST', headers, body: JSON.stringify({ parent: { database_id: config.databaseId }, properties }),
+  });
+  if (!response.ok) {
+    if (store && [400, 401, 403, 404, 429].includes(response.status)) await store.release(eventId);
+    throw Error(`Wake record persistence failed (${response.status})`);
+  }
+  const created = await response.json();
   if (!created.id) throw Error('WakeUp Map did not return a record ID');
-  return { id: created.id, existing: false };
+  return { id: created.id as string, record: normalizePage(created), existing: false };
 }

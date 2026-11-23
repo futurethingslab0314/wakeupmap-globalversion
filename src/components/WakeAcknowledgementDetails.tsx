@@ -13,7 +13,8 @@ export default function WakeAcknowledgementDetails({ record, language }: { recor
       timeZone: record.wakeTargetTimeZone || 'UTC', year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23',
     }).format(new Date(record.wakeScheduledAt));
   } catch {}
-  const delay = typeof record.wakeDelaySeconds === 'number' ? Math.max(0,Math.floor(record.wakeDelaySeconds)) : null;
+  const early = (record.wakeDelaySeconds ?? 0) < 0;
+  const delay = typeof record.wakeDelaySeconds === 'number' ? Math.floor(Math.abs(record.wakeDelaySeconds)) : null;
   const rows = [
     [zh ? '帳號' : 'Account', record.userName || '—'],
     [zh ? '醒來確認：按鈕時間' : 'Awake: button pressed at', formatWakePressTime(record,language,true)],
@@ -22,12 +23,12 @@ export default function WakeAcknowledgementDetails({ record, language }: { recor
     [zh ? '預約響鈴：城市當地時間' : 'Scheduled alarm: target local time', scheduled],
     [zh ? '醒來城市：依時間選址' : 'Wake city: selected by time', `${getRecordCity(record,language)}, ${getRecordCountry(record,language)}`],
     [zh ? '距離預約城市' : 'Distance from reserved city', formatWakeDistance(record)],
-    [zh ? '響鈴後多久確認' : 'Time until acknowledgement', delay === null ? '—' : zh
+    [early ? (zh ? '提早醒來' : 'Awoke before the alarm') : (zh ? '響鈴後多久確認' : 'Time until acknowledgement'), delay === null ? '—' : zh
       ? `${Math.floor(delay/60)} 分 ${delay%60} 秒` : `${Math.floor(delay/60)} min ${delay%60} sec`],
   ];
   return <section className="space-y-6">
     <h3 className="font-mono text-sm font-bold uppercase tracking-[0.18em] text-gray-900">
-      {zh ? 'WakeUpHere 醒來紀錄' : 'WakeUpHere awakening record'}
+      {zh ? '醒來紀錄' : 'Awakening record'}
     </h3>
     <dl className="divide-y divide-black/10 border-y border-black/10">
       {rows.map(([label,value]) => <div key={label} className="space-y-2 py-4">

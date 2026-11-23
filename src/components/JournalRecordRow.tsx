@@ -24,7 +24,7 @@ export default function JournalRecordRow({record,language,highlighted,onHover,on
     {record.wakeEventId?<div className="mt-2 text-[10px] leading-relaxed text-gray-500">{formatWakePressTime(record,language)}<div className="text-[9px]">{record.wakeTimeZone}</div></div>:null}</>}
   </td>
   <td className="px-4 py-4 align-top tabular-nums text-gray-600">{pending?'—':formatWakeDistance(record)}</td>
-  <td className="px-4 py-4 align-top text-gray-500"><div className="max-w-[240px] whitespace-normal leading-relaxed">{pending?(zh?'待甦醒':'Awaiting awakening'):record.wakeEventId?(zh?'已確認醒來':'Awakening confirmed'):record.greeting}</div></td>
+  <td className="px-4 py-4 align-top text-gray-500"><div className="max-w-[240px] whitespace-normal leading-relaxed">{pending?(zh?'待甦醒':'Awaiting awakening'):record.wakeEventId?((record.wakeDelaySeconds ?? 0) < 0 ? (zh?'提前醒來，已跳過鬧鐘':'Awoke early, alarm skipped') : (zh?'已確認醒來':'Awakening confirmed')):record.greeting}</div></td>
   <td className="px-4 py-4 align-top"><button onClick={onSelect} className="min-h-10 whitespace-nowrap text-[9px] uppercase tracking-widest text-gray-500 transition-colors hover:text-black focus-visible:outline focus-visible:outline-2">{uiText[language].viewDetails}</button></td>
  </tr>;
 }

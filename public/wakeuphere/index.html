@@ -501,6 +501,8 @@
     }
 
 
+
+
     // --- Dynamic Locations Preset Database ---
     const CONTINENT_LABELS = {
       antarctica: { name_zh: "南極洲", name_en: "Antarctica" },
@@ -754,7 +756,7 @@
             body: JSON.stringify(payload), signal: AbortSignal.timeout(payload.wakeEvent ? 60000 : 10000),
           });
           const result = await response.json();
-          if (!response.ok || !result?.ok) throw new Error("Booking sync failed");
+          if (!response.ok || !result?.ok || result.pending) throw new Error("Booking sync failed");
           if (payload.wakeEvent && result.wakeRecordId) {
             // Save the independent job before dropping the acknowledged event.
             // Do not await generation: sound stop and booking writes stay fast.
@@ -1261,13 +1263,71 @@
       }
     }
 
-    function pollDailyAlarm() {
-      if (!dailyAlarm || currentStage !== 3) return;
-      if (!isAlarmRinging && dailyAlarm.tick(Date.now())) {
+    let roundCheckInFlight = null;
+    let publishedRingingAt = null;
+    let ringingPublishInFlight = null;
+
+    async function publishRingingRound(alarm, scheduledAt) {
+      if (publishedRingingAt === scheduledAt || ringingPublishInFlight === alarm) return;
+      ringingPublishInFlight = alarm;
+      try {
+        const response = await fetch(WAKEUPHERE_API_PATH, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "alarm-ringing", userName: getStoredUserName(),
+            city: selectedCity.name_en, country: selectedCountry.name_en,
+            scheduledAt: new Date(scheduledAt).toISOString(),
+          }),
+          signal: AbortSignal.timeout(2500),
+        });
+        if (response.ok && dailyAlarm === alarm) publishedRingingAt = scheduledAt;
+      } catch {
+        // The next poll retries publication if the pending round is still active.
+      } finally {
+        if (ringingPublishInFlight === alarm) ringingPublishInFlight = null;
+      }
+    }
+
+    async function pollDailyAlarm() {
+      const alarm = dailyAlarm;
+      if (!alarm || currentStage !== 3 || isSimulatingAlarm || roundCheckInFlight === alarm) return;
+      const { pendingAt, nextAt } = alarm.snapshot();
+      const scheduledAt = pendingAt ?? nextAt;
+      const query = new URLSearchParams({
+        view: "wake-round", userName: getStoredUserName(),
+        city: selectedCity.name_en, country: selectedCountry.name_en,
+        scheduledAt: new Date(scheduledAt).toISOString(),
+      });
+      roundCheckInFlight = alarm;
+      let confirmed = false;
+      let confirmationPending = false;
+      try {
+        const response = await fetch(`${WAKEUPHERE_API_PATH}?${query}`, {
+          cache: "no-store", signal: AbortSignal.timeout(2500),
+        });
+        if (response.ok) {
+          const status = await response.json();
+          confirmed = status.confirmed === true;
+          confirmationPending = status.pending === true;
+        }
+      } catch {
+        // Offline, the local schedule and joystick still work.
+      } finally {
+        if (roundCheckInFlight === alarm) roundCheckInFlight = null;
+      }
+      if (dailyAlarm !== alarm || currentStage !== 3 || isSimulatingAlarm) return;
+      const current = alarm.snapshot();
+      if ((current.pendingAt ?? current.nextAt) !== scheduledAt) return;
+      if (confirmationPending && pendingAt === null && Date.now() < scheduledAt + 6000) return;
+      if (confirmed && alarm.confirm(scheduledAt)) {
+        persistDailyAlarm();
+        if (pendingAt !== null && isAlarmRinging) finishAlarmRinging();
+      } else if (!isAlarmRinging && (pendingAt !== null || alarm.tick(Date.now()))) {
         persistDailyAlarm();
         if (isResetModalOpen) closeResetModal();
         beginAlarmRinging(false);
       }
+      if (alarm.snapshot().pendingAt === scheduledAt) void publishRingingRound(alarm, scheduledAt);
       updateDailyAlarmStatus();
     }
 
@@ -1275,15 +1335,16 @@
       if (alarmTimer) clearInterval(alarmTimer);
       alarmTimer = null;
       dailyAlarm = null;
+      publishedRingingAt = null;
       const saved = readSavedDailyAlarm();
       const matches = saved?.userName === getStoredUserName() &&
         saved?.city === selectedCity?.name_en && saved?.country === selectedCountry?.name_en;
       try {
         dailyAlarm = WakeupHereAlarm.create(selectedCity.timezone, Date.now(), matches ? saved.schedule : null);
         persistDailyAlarm();
-        if (dailyAlarm.snapshot().pendingAt !== null) beginAlarmRinging(false);
-        pollDailyAlarm();
-        alarmTimer = setInterval(pollDailyAlarm, 1000);
+        updateDailyAlarmStatus();
+        alarmTimer = setInterval(pollDailyAlarm, 2000);
+        if (dailyAlarm.snapshot().pendingAt !== null) void pollDailyAlarm();
       } catch (error) {
         dailyAlarm = null;
         try { localStorage.removeItem(ALARM_STORAGE_KEY); } catch {}
@@ -1746,33 +1807,34 @@
       return event;
     }
 
+    function finishAlarmRinging() {
+      isAlarmRinging = false;
+      stopAlarmAudio();
+      isSimulatingAlarm = false;
+      if (simulatedTimer) clearInterval(simulatedTimer);
+      simulatedTimer = null;
+
+      const statusLabel = document.getElementById("alarm-status-label");
+      if (statusLabel) {
+        statusLabel.textContent = "STOPPED // [SPACE] NEW CITY";
+        statusLabel.classList.remove("text-red-500", "animate-pulse");
+        statusLabel.classList.add("text-[#45e945]");
+      }
+      stopRingingUI();
+      updateDailyAlarmStatus();
+    }
+
     function handleAlarmStageSpaceKey() {
       if (isAlarmRinging) {
         // Freeze the physical button time before audio/UI work or network retry.
         const wakeEvent = captureWakeAcknowledgement();
         // Persist the outbox before clearing the pending alarm acknowledgement.
         syncWakeupHereIdentity({ press: true, wakeEvent });
-        // First Space press: Stop ringing, keep normal clock running
-        isAlarmRinging = false;
-        stopAlarmAudio();
         if (dailyAlarm && !isSimulatingAlarm) {
           dailyAlarm.dismiss();
           persistDailyAlarm();
         }
-        isSimulatingAlarm = false;
-        if (simulatedTimer) clearInterval(simulatedTimer);
-        simulatedTimer = null;
-
-        const statusLabel = document.getElementById("alarm-status-label");
-        if (statusLabel) {
-          statusLabel.textContent = "STOPPED // [SPACE] NEW CITY";
-          statusLabel.classList.remove("text-red-500", "animate-pulse");
-          statusLabel.classList.add("text-[#45e945]");
-        }
-
-        // Clean up Map Top Overlay ringing UI
-        stopRingingUI();
-        updateDailyAlarmStatus();
+        finishAlarmRinging();
       } else {
         // If not ringing, prompt "重新預約甦醒位置嗎？" modal instead of resetting immediately
         openResetModal();

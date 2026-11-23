@@ -498,22 +498,40 @@ async function updateNotionBreakfastProperties(
 type StoredBreakfast = {recipe:string;recipeZh:string;imagePrompt:string;imageUrl:string;imageStorageKey:string};
 type ImageReceipt = {version:1;pageId:string;owner:string;phase:'preparing'|'image_requested'|'stored'|'failed';updatedAt:number;breakfast?:StoredBreakfast};
 
+export function createR2ObjectRequester() {
+  const endpoint = process.env.CLOUDFLARE_R2_ENDPOINT;
+  const bucket = process.env.CLOUDFLARE_R2_BUCKET;
+  const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
+  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) throw Error("Missing Cloudflare R2 configuration");
+  return (method: string, key: string, body = new Uint8Array(), contentType = "application/json",
+    conditions: Record<string, string> = {}) => {
+    const url = new URL(`${endpoint.replace(/\/$/, "")}/${bucket}/${encodeR2Key(key)}`);
+    const signature = signR2Request({ method, url, accessKeyId, secretAccessKey, body, contentType, extraHeaders: conditions });
+    return fetch(url, {
+      method,
+      headers: {
+        "Content-Type": contentType,
+        Authorization: signature.authorization,
+        "x-amz-content-sha256": signature.payloadHash,
+        "x-amz-date": signature.amzDate,
+        ...conditions,
+      },
+      ...(method === "PUT" ? { body: Buffer.from(body) } : {}),
+    });
+  };
+}
+
 // The receipt is shared by all serverless instances. Never expire an
 // image_requested receipt: a lost provider response must not charge for a retry.
 function breakfastStore(pageId:string) {
-  const endpoint=process.env.CLOUDFLARE_R2_ENDPOINT, bucket=process.env.CLOUDFLARE_R2_BUCKET;
-  const accessKeyId=process.env.CLOUDFLARE_R2_ACCESS_KEY_ID, secretAccessKey=process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
   const publicBase=process.env.CLOUDFLARE_R2_PUBLIC_URL;
-  if(!endpoint||!bucket||!accessKeyId||!secretAccessKey||!publicBase)throw Error('Missing Cloudflare R2 configuration');
+  if(!publicBase)throw Error('Missing Cloudflare R2 public URL');
   const normalized=pageId.trim().toLowerCase().replace(/-/g,'');
   const prefix=`breakfast-records/v1/${createHash('sha256').update(normalized).digest('hex')}`;
   const imageStorageKey=prefix+'/image.png',receiptKey=prefix+'/job.json';
   const imageUrl=buildR2PublicUrl(publicBase,imageStorageKey);
-  const request=async(method:string,key:string,body=new Uint8Array(),type='application/json',conditions:Record<string,string>={})=>{
-    const url=new URL(`${endpoint.replace(/\/$/,'')}/${bucket}/${encodeR2Key(key)}`);
-    const signature=signR2Request({method,url,accessKeyId,secretAccessKey,body,contentType:type,extraHeaders:conditions});
-    return fetch(url,{method,headers:{'Content-Type':type,Authorization:signature.authorization,'x-amz-content-sha256':signature.payloadHash,'x-amz-date':signature.amzDate,...conditions},...(method==='PUT'?{body:Buffer.from(body)}:{})});
-  };
+  const request = createR2ObjectRequester();
   const read=async():Promise<{job:ImageReceipt;etag:string}|null>=>{
     const response=await request('GET',receiptKey);
     if(response.status===404)return null;

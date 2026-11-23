@@ -59,3 +59,17 @@ test('corrupt or wrong-zone saved state is replaced by a fresh next morning', ()
   assert.equal(state.snapshot().nextAt, ms('2026-11-17T17:00:00Z'));
   assert.equal(state.tick(now), false);
 });
+
+test('remote confirmation skips only its round and dismisses a matching pending alarm', () => {
+  const a = api(), due = ms('2026-11-16T17:00:00Z');
+  const tomorrow = ms('2026-11-17T17:00:00Z');
+  const alarm = a.create('America/Anchorage', due - 1000);
+  assert.equal(alarm.confirm(due), true);
+  assert.equal(alarm.snapshot().nextAt, tomorrow);
+  assert.equal(alarm.tick(due), false);
+  assert.equal(alarm.tick(tomorrow), true);
+  assert.equal(alarm.confirm(due), false);
+  assert.equal(alarm.confirm(tomorrow), true);
+  assert.equal(alarm.snapshot().pendingAt, null);
+  assert.equal(alarm.snapshot().nextAt, ms('2026-11-18T17:00:00Z'));
+});

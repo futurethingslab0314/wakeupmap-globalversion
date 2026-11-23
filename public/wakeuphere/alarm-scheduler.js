@@ -51,6 +51,15 @@ var WakeupHereAlarm = (() => {
         return true;
       },
       dismiss() { state.pendingAt = null; },
+      confirm(scheduledAt) {
+        if (scheduledAt === state.pendingAt && scheduledAt !== null) {
+          state.pendingAt = null;
+          return true;
+        }
+        if (scheduledAt !== state.nextAt) return false;
+        state.nextAt = nextMorning(scheduledAt + 1, zone);
+        return true;
+      },
       snapshot() { return { ...state }; },
     };
   }
