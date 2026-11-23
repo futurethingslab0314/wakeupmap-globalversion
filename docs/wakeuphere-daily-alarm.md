@@ -77,3 +77,7 @@ npm run build
 ## 醒來確認紀錄
 
 真正鬧鐘響起後按下確認鍵，也會將醒來事件同步到 WakeUp Map；詳見 [醒來確認紀錄](wakeuphere-awake-records.md)。WakeUpHere 介面維持原樣。
+
+## 到站語音（2026-11-23）
+
+先播兩遍「國家的城市到了」，中間停 3 秒，接原鬧鈴；失敗備援與 Pi 驗收見 [到站語音](wakeuphere-alarm-announcement.md)。

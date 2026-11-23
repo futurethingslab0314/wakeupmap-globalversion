@@ -478,6 +478,28 @@
     }
 
     const sound = new SoundService();
+    let alarmAnnouncement = null;
+    function getAlarmAnnouncement() {
+      if (!alarmAnnouncement && window.WakeupHereAnnouncement) {
+        alarmAnnouncement = window.WakeupHereAnnouncement.create({
+          speech: window.speechSynthesis,
+          Utterance: window.SpeechSynthesisUtterance,
+          startRinging: () => sound.startAlarmRinging(),
+          stopRinging: () => sound.stopAlarmRinging(),
+        });
+      }
+      return alarmAnnouncement;
+    }
+    function startAlarmAudio() {
+      const player = getAlarmAnnouncement();
+      if (player && sound.enabled) player.start(selectedCountry?.name_zh, selectedCity?.name_zh);
+      else sound.startAlarmRinging();
+    }
+    function stopAlarmAudio() {
+      if (alarmAnnouncement) alarmAnnouncement.stop();
+      else sound.stopAlarmRinging();
+    }
+
 
     // --- Dynamic Locations Preset Database ---
     const CONTINENT_LABELS = {
@@ -1463,7 +1485,7 @@
       simulatedTimer = null;
       isSimulatingAlarm = false;
       isAlarmRinging = false;
-      sound.stopAlarmRinging();
+      stopAlarmAudio();
 
       // Clean up Map Top Overlay ringing UI
       stopRingingUI();
@@ -1545,7 +1567,7 @@
       }
 
       // 3. Start ringing sound loop
-      sound.startAlarmRinging();
+      startAlarmAudio();
 
       // 4. Update UI labels
       document.getElementById("alarm-city-name").textContent = selectedCity.name_zh + " // " + selectedCity.name_en;
@@ -1732,7 +1754,7 @@
         syncWakeupHereIdentity({ press: true, wakeEvent });
         // First Space press: Stop ringing, keep normal clock running
         isAlarmRinging = false;
-        sound.stopAlarmRinging();
+        stopAlarmAudio();
         if (dailyAlarm && !isSimulatingAlarm) {
           dailyAlarm.dismiss();
           persistDailyAlarm();
@@ -1879,6 +1901,7 @@
 
     // Startup
     window.addEventListener("DOMContentLoaded", () => {
+      getAlarmAnnouncement();
       initMap();
       setStoredUserName(getStoredUserName());
       // Resume content even if loading the map's city assets is temporarily unavailable.
@@ -1902,6 +1925,7 @@
     });
   </script>
   <script src="/wakeuphere/auto-update.js?v=__WAKEUPHERE_BUILD__"></script>
+  <script src="/wakeuphere/alarm-announcement.js?v=__WAKEUPHERE_BUILD__"></script>
   <script src="/wakeuphere/alarm-scheduler.js?v=__WAKEUPHERE_BUILD__"></script>
   <script src="/wakeuphere/booking-client.js?v=__WAKEUPHERE_BUILD__"></script>
 </body>

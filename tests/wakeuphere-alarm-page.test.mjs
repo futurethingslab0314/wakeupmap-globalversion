@@ -30,7 +30,7 @@ async function page(storage = new Map(), time = Date.parse('2026-11-16T16:59:59Z
     localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k,v) => storage.set(k,v), removeItem: k => storage.delete(k) },
     sessionStorage: { getItem: () => null, removeItem() {}, setItem() {} },
     document: { getElementById: element, addEventListener() {}, querySelector:()=>null, createElement: () => element(Symbol()) },
-    window: { addEventListener(name,fn) { if(!handlers.has(name))handlers.set(name,[]);handlers.get(name).push(fn); }, location: { href: 'https://example.test/wakeuphere/' },
+    window: { setTimeout: () => 1, clearTimeout() {}, addEventListener(name,fn) { if(!handlers.has(name))handlers.set(name,[]);handlers.get(name).push(fn); }, location: { href: 'https://example.test/wakeuphere/' },
       CITIES_DATA: [{ city: 'Anchorage', city_zh: '安克拉治', country: 'United States', country_zh: '美國',
         timezone: 'America/Anchorage', latitude: 61.2, longitude: -149.9 }] },
     L: { divIcon: opts => opts, marker },
@@ -42,6 +42,7 @@ async function page(storage = new Map(), time = Date.parse('2026-11-16T16:59:59Z
   });
   vm.runInContext(fs.readFileSync(new URL('../public/wakeuphere/alarm-scheduler.js', import.meta.url), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(new URL('../public/wakeuphere/booking-client.js', import.meta.url), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(new URL('../public/wakeuphere/alarm-announcement.js', import.meta.url), 'utf8'), ctx);
   vm.runInContext(main, ctx);
   vm.runInContext(`sound.playClick = () => {}; sound.playSuccess = () => {};
     sound.startAlarmRinging = countStart; sound.stopAlarmRinging = countStop;
@@ -218,4 +219,27 @@ test('browser deployment reload is deferred while content generation is in fligh
  p.ctx.createWakeupHereUpdateChecker=options=>{p.ctx.updateOptions=options;return()=>{};};
  p.run('startDeploymentUpdateChecks()');assert.equal(p.ctx.updateOptions.canUpdate(),false);
  p.run('releaseContent()');await p.run('getContentQueue().flush()');assert.equal(p.ctx.updateOptions.canUpdate(),true);
+});
+
+
+test('real alarm page routes speech, preserves acknowledgement, and cancels delayed second announcement', async () => {
+  const p = await page();
+  p.run(`window.spoken = []; window.pendingVoiceTimers = new Map(); let voiceTimerId = 0;
+    window.setTimeout = (fn, ms) => { window.pendingVoiceTimers.set(++voiceTimerId, {fn,ms}); return voiceTimerId; };
+    window.clearTimeout = id => window.pendingVoiceTimers.delete(id);
+    window.SpeechSynthesisUtterance = class { constructor(text) { this.text = text; } };
+    window.speechSynthesis = { getVoices: () => [{lang:'zh-TW'}], speak: u => window.spoken.push(u), cancel() {} };`);
+  p.run('setStage(3)');
+  p.time('2026-11-16T17:00:00Z'); await p.run('pollDailyAlarm()');
+  assert.equal(p.run('window.spoken.length'),1);
+  assert.equal(p.run('window.spoken[0].text'),'美國的安克拉治到了');
+  assert.equal(p.starts(),0);
+  p.run('window.spoken[0].onend()');
+  assert.equal(p.run('[...window.pendingVoiceTimers.values()][0].ms'),3000);
+  p.run('handleAlarmStageSpaceKey()');
+  assert.equal(p.run('window.pendingVoiceTimers.size'),0);
+  assert.equal(p.run('isAlarmRinging'),false);
+  assert.equal(p.starts(),0);
+  assert.equal(p.stops(),1);
+  assert.equal(JSON.parse(p.storage.get('wakeuphere.dailyAlarm')).schedule.pendingAt,null);
 });
