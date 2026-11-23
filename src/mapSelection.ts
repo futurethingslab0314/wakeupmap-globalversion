@@ -171,12 +171,45 @@ export function getCityVisitMarkerRadius(records: NotionRecord[], targetRecord: 
   return 2;
 }
 
+const countryAliases = new Map([
+  ["usa", "united states of america"],
+  ["us", "united states of america"],
+  ["united states", "united states of america"],
+  ["美國", "united states of america"],
+  ["gb", "united kingdom"],
+  ["uk", "united kingdom"],
+  ["英國", "united kingdom"],
+  ["the netherlands", "netherlands"],
+  ["ivory coast", "côte d’ivoire"],
+  ["côte d'ivoire", "côte d’ivoire"],
+  ["南極洲", "antarctica"],
+  ["阿根廷", "argentina"],
+  ["哈薩克斯坦", "kazakhstan"],
+  ["哈薩克", "kazakhstan"],
+  ["斯里蘭卡", "sri lanka"],
+  ["俄羅斯", "russia"],
+  ["哥倫比亞", "colombia"],
+  ["智利", "chile"],
+  ["南非", "south africa"],
+  ["澳大利亞", "australia"],
+  ["澳洲", "australia"],
+  ["加拿大", "canada"],
+  ["台灣", "taiwan"],
+  ["臺灣", "taiwan"],
+]);
+
+function getCountryKey(country: string): string {
+  const key = country.normalize("NFKC").trim().toLowerCase().replace(/\s+/g, " ");
+  return countryAliases.get(key) ?? key;
+}
+
 export function getCountryVisitStats(records: NotionRecord[], targetCountry: string | null): CountryVisitStats | null {
   if (!targetCountry) {
     return null;
   }
 
-  const countryRecords = records.filter((record) => record.country === targetCountry);
+  const countryKey = getCountryKey(targetCountry);
+  const countryRecords = records.filter((record) => countryKey && getCountryKey(record.country) === countryKey);
   const uniqueCities = new Set(countryRecords.map((record) => record.city));
 
   return {

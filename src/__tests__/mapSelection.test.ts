@@ -205,6 +205,23 @@ test("getCountryVisitStats returns total visits and unique cities for a selected
   });
 });
 
+test("country stats match legacy country labels within the selected identity", () => {
+  const records = filterRecordsForUser([
+    { ...createRecord("one", undefined, "YT"), city: "Toronto", country: "加拿大" },
+    { ...createRecord("two", undefined, "YT"), city: "Toronto", country: " Canada " },
+    { ...createRecord("three", undefined, "YT"), city: "Phoenix", country: "United States" },
+    { ...createRecord("four", undefined, "YT"), city: "London", country: "GB" },
+    { ...createRecord("five", undefined, "Other"), city: "Vancouver", country: "Canada" },
+  ], "YT");
+
+  assert.deepEqual(getCountryVisitStats(records, "Canada"), {
+    country: "Canada", totalCities: 1, totalVisits: 2,
+  });
+  assert.equal(getCountryVisitStats(records, "United States of America")?.totalVisits, 1);
+  assert.equal(getCountryVisitStats(records, "United Kingdom")?.totalVisits, 1);
+  assert.equal(getCountryVisitStats(records, "Japan")?.totalVisits, 0);
+});
+
 test("isMainView returns true only when no detail or journal panel is open", () => {
   assert.equal(
     isMainView({ showDatabase: false, selectedRecordId: null, selectedContinent: null }),
