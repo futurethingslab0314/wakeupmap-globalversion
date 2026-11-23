@@ -21,6 +21,19 @@ body,
   overscroll-behavior: none;
 }
 
+.wakeup-globe svg {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wakeup-globe svg :focus {
+  outline: none;
+}
+
+.wakeup-globe svg [role="button"]:focus-visible > circle:not([fill="transparent"]) {
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
 body {
   background: radial-gradient(circle at center, #ffffff 0%, rgba(0, 255, 0, 0.1) 50%, rgba(0, 255, 0, 0.4) 100%);
   background-attachment: fixed;

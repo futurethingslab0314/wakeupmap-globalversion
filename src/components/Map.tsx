@@ -59,7 +59,10 @@ const Map: React.FC<MapProps> = ({
   onSelectGroup,
 }: MapProps) => {
   const records = useMemo(() => layerFilter === "reservations" ? [] : actualRecords, [actualRecords, layerFilter]);
-  const visibleTargets = useMemo(() => layerFilter === "actual" ? [] : reservationTargets, [reservationTargets, layerFilter]);
+  const latestRecordId = useMemo(() => getLatestRecord(actualRecords)?.id, [actualRecords]);
+  const visibleTargets = useMemo(() => layerFilter === "actual" ? [] : reservationTargets.filter(
+    (target) => !target.linkedWakeRecordId || target.linkedWakeRecordId === latestRecordId,
+  ), [reservationTargets, layerFilter, latestRecordId]);
   const focusRecords = useMemo(() => [...records, ...visibleTargets], [records, visibleTargets]);
   const [isDragging, setIsDragging] = useState(false);
   const [lastMousePos, setLastMousePos] = useState<{ x: number; y: number } | null>(null);
@@ -298,7 +301,7 @@ const Map: React.FC<MapProps> = ({
   return (
     <div 
       ref={containerRef}
-      className="w-full h-full cursor-grab active:cursor-grabbing overflow-hidden relative touch-none"
+      className="w-full h-full cursor-grab active:cursor-grabbing overflow-hidden relative touch-none wakeup-globe"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -389,7 +392,7 @@ const Map: React.FC<MapProps> = ({
           </g>
         )}
 
-        <ReservationMapLayer targets={visibleTargets} pairs={comparisonPairs} filter={layerFilter} projection={projection} isVisible={isVisible} onSelect={onSelectRecord} language={language} fontSize={getStableSvgSize(11, overlayScale)} selectedId={focusedRecordId} />
+        <ReservationMapLayer targets={visibleTargets} pairs={comparisonPairs.filter((pair) => pair.actual.id === latestRecordId)} filter={layerFilter} projection={projection} isVisible={isVisible} onSelect={onSelectRecord} language={language} fontSize={getStableSvgSize(11, overlayScale)} selectedId={focusedRecordId} />
 
         {/* Wakeup Today Mode: Pulsing Group Markers */}
         {isWakeupMode && groupedRecords.map((group, idx) => {
@@ -483,7 +486,9 @@ const Map: React.FC<MapProps> = ({
 
         {/* Normal Mode: Individual Markers */}
         {!isWakeupMode && records.map((record) => {
-          const isSelected = focusedRecordId === record.id;
+          const isLatestRecord = latestRecordId === record.id;
+          const isSelected = selectedId === record.id || (!selectedId && isLatestRecord);
+          const showActualLabel = isLatestRecord && !!record.wakeEventId;
           const isHighlighted = highlightedIds.includes(record.id);
           const baseMarkerRadius = getCityVisitMarkerRadius(records, record);
           const markerRadius = isSelected
@@ -515,7 +520,7 @@ const Map: React.FC<MapProps> = ({
                 }}
                 onClick={handleRecordSelect}
                 role="button" tabIndex={0}
-                aria-label={record.wakeEventId ? `${language === "zh" ? "實際甦醒位置" : "Actual awakening"} · ${cityLabel}` : cityLabel}
+                aria-label={showActualLabel ? `${language === "zh" ? "實際甦醒位置" : "Actual awakening"} · ${cityLabel}` : cityLabel}
                 onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); handleRecordSelect(); } }}
                 className="cursor-pointer"
               >
@@ -526,7 +531,7 @@ const Map: React.FC<MapProps> = ({
                   fill="#000"
                 />
                 
-                {record.wakeEventId ? <>
+                {showActualLabel ? <>
                   <title>{`${language === "zh" ? "實際甦醒位置" : "Actual awakening"} · ${cityLabel}`}</title>
                   <text y={getStableSvgSize(18, overlayScale)} textAnchor="middle" fontSize={getStableSvgSize(11, overlayScale)} fontFamily="monospace" fill="black" stroke="white" strokeWidth={3} paintOrder="stroke">{language === "zh" ? "實際甦醒位置" : "Actual awakening"} · {cityLabel}</text>
                 </> : null}
@@ -543,8 +548,8 @@ const Map: React.FC<MapProps> = ({
                   />
                 )}
 
-                {/* Label for selected/highlighted - Centered above as in screenshot */}
-                {(isSelected || isHighlighted) && !record.wakeEventId && (
+                {/* City label for the selected or latest record */}
+                {isSelected && !showActualLabel && (
                   <>
                     <rect
                       x={labelHitArea.x}

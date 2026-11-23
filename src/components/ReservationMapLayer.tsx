@@ -34,7 +34,7 @@ export default function ReservationMapLayer({targets,pairs,filter,projection,isV
     <title>{`${target.userName} // ${label} // ${target.wakeTargetTimeZone}`}</title>
     <circle r={12} fill="transparent"/>
     <circle r={selectedId===target.id?7:5.5} fill="none" stroke="#c46320" strokeWidth={1.7}/>
-    <text y={-fontSize*1.5} textAnchor="middle" fontSize={fontSize} fontFamily="monospace" fill="#a95018" stroke="white" strokeWidth={3} paintOrder="stroke">{label}</text>
+    <text y={-fontSize*1.5} textAnchor="middle" fontSize={fontSize} fontFamily="monospace" fill="#a95018" stroke="white" strokeWidth={3} paintOrder="stroke">{target.linkedWakeRecordId ? label : getRecordCity(target,language)}</text>
    </g>;
   })}
  </g>;
